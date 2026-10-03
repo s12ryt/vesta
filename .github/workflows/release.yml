@@ -3,6 +3,12 @@ name: Release
 on:
   push:
     tags: ["v*", "1.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and (re)publish."
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -13,8 +19,12 @@ permissions:
 jobs:
   release:
     runs-on: windows-2022
+    env:
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
       - name: Configure
         run: cmake --preset release -DBUILD_TESTING=ON
       - name: Build
@@ -27,14 +37,14 @@ jobs:
         shell: pwsh
         run: |
           Compress-Archive -LiteralPath build/bin/vesta.exe, build/bin/vesta.pdb `
-            -DestinationPath "Vesta-${{ github.ref_name }}-forum.zip"
+            -DestinationPath "Vesta-$env:RELEASE_TAG-forum.zip"
       - name: Create checksum
         shell: pwsh
         run: |
           @(
             "build/bin/vesta.exe"
             "build/bin/vesta.pdb"
-            "Vesta-${{ github.ref_name }}-forum.zip"
+            "Vesta-$env:RELEASE_TAG-forum.zip"
           ) | ForEach-Object {
             $hash = (Get-FileHash $_ -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $(Split-Path $_ -Leaf)"
@@ -43,16 +53,16 @@ jobs:
         uses: actions/attest@v4
         with:
           subject-path: build/bin/vesta.exe
-      - name: Publish immutable GitHub release
+      - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
+          $tag = $env:RELEASE_TAG
           $assets = @(
             "build/bin/vesta.exe"
             "build/bin/vesta.pdb"
-            "Vesta-${{ github.ref_name }}-forum.zip"
+            "Vesta-$env:RELEASE_TAG-forum.zip"
             "SHA256SUMS.txt"
             "LICENSE"
             "NOTICE"
@@ -83,17 +93,35 @@ jobs:
           }
           $releaseNotes | Set-Content -Encoding utf8 RELEASE_NOTES.md
 
+          # Immutable releases are an opt-in repository setting. When it is enabled
+          # a published release must never be replaced; when it is not enabled the
+          # release can be refreshed in place. Detect the setting instead of
+          # assuming it, so the workflow works on forks and mirrors too.
+          $immutableEnabled = $false
+          $immutableJson = gh api "repos/${{ github.repository }}/immutable-releases" 2>$null
+          if ($LASTEXITCODE -eq 0 -and $immutableJson) {
+            $immutableEnabled = [bool]($immutableJson | ConvertFrom-Json).enabled
+          }
+          if ($immutableEnabled) {
+            Write-Host "Immutable releases are enabled for ${{ github.repository }}."
+          } else {
+            Write-Warning "Immutable releases are not enabled for ${{ github.repository }}; publishing a standard release."
+          }
+
           $releaseJson = gh release view $tag --json isDraft 2>$null
           $releaseExists = $LASTEXITCODE -eq 0
           if ($releaseExists) {
             $release = $releaseJson | ConvertFrom-Json
-            if (-not $release.isDraft) {
+            if (-not $release.isDraft -and $immutableEnabled) {
               throw "Release $tag already exists and is published. Immutable releases cannot be replaced."
+            }
+            if (-not $release.isDraft) {
+              Write-Warning "Release $tag already exists and is published; refreshing its assets in place."
             }
             gh release upload $tag @assets --clobber
             if ($LASTEXITCODE -ne 0) { throw "Failed to upload release assets." }
             gh release edit $tag --notes-file RELEASE_NOTES.md
-            if ($LASTEXITCODE -ne 0) { throw "Failed to update draft release notes." }
+            if ($LASTEXITCODE -ne 0) { throw "Failed to update release notes." }
           } else {
             gh release create $tag `
               --verify-tag `
@@ -104,21 +132,27 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Failed to create draft release." }
           }
 
-          $draft = gh release view $tag --json assets,isDraft | ConvertFrom-Json
+          $releaseState = gh release view $tag --json assets,isDraft | ConvertFrom-Json
           $expectedAssets = @($assets | ForEach-Object { Split-Path $_ -Leaf })
-          $actualAssets = @($draft.assets | ForEach-Object { $_.name })
+          $actualAssets = @($releaseState.assets | ForEach-Object { $_.name })
           $missingAssets = @($expectedAssets | Where-Object { $_ -notin $actualAssets })
-          if (-not $draft.isDraft -or $missingAssets.Count -ne 0) {
-            throw "Draft validation failed. Missing assets: $($missingAssets -join ', ')"
+          if ($missingAssets.Count -ne 0) {
+            throw "Release validation failed. Missing assets: $($missingAssets -join ', ')"
           }
 
-          gh release edit $tag --draft=false
-          if ($LASTEXITCODE -ne 0) { throw "Failed to publish immutable release." }
+          if ($releaseState.isDraft) {
+            gh release edit $tag --draft=false
+            if ($LASTEXITCODE -ne 0) { throw "Failed to publish the release." }
+          }
 
-          $published = gh api `
+          $readback = gh api `
             -H "X-GitHub-Api-Version: 2026-03-10" `
             "repos/${{ github.repository }}/releases/tags/$tag" `
             | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or -not $published.immutable) {
-            throw "GitHub published $tag without immutable protection."
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to read back the published release $tag."
           }
+          if ($immutableEnabled -and -not $readback.immutable) {
+            throw "Immutable releases are enabled but $tag was published without immutable protection."
+          }
+          Write-Host "Published release $tag with assets: $($expectedAssets -join ', ')."

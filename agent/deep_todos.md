@@ -18,6 +18,7 @@
 | T-001 | 專案漢化（新增簡體中文介面語言 `zh`） | 已完成（未經編譯驗證） | 見下方詳情 |
 | T-002 | 新增繁體中文介面語言 `zh_hant`（含字型字形範圍） | 已完成（未經編譯驗證） | 見下方詳情 |
 | T-003 | 提交並推送漢化成果至 Operator 帳號的 `vesta` 倉庫 `main` | 已完成 | commit `513eae8` → `s12ryt/vesta` |
+| T-004 | 修復 GitHub Actions Release workflow（讓 tag 推送能正確產出／發佈 exe） | 已完成（待遠端驗證） | 見下方詳情 |
 
 ---
 
@@ -168,3 +169,51 @@
 **備註**：
 - commit message 有輕微錯字 `English/RУсский`（混用拉丁 R 與西里爾 Усский），已推送故不重寫歷史。
 - 仍未經編譯驗證（環境缺 `cmake`/`cl`/`clangd`）。
+
+---
+
+## T-004 修復 GitHub Actions Release workflow
+
+**來源需求**：Operator（m0089）「請你去讓github-workflow正確產出exe」。
+
+**診斷（關鍵發現）**：
+- exe **本來就有正確產出**：`build.yml` 的 run `#37141266795`（workflow_dispatch）為 **SUCCESS**，artifact `vesta-windows-x64` 約 2.5MB（`build/bin/vesta.exe`）。⇒ 我們的中文原始碼**可通過編譯**。
+- `push` 到 `main` 當時**沒有觸發 Build run**（可能 Actions 於推送當下尚未啟用，約 17:38Z 才啟用）。
+- 三個 **Release run 全數 FAILURE**（tag `v1.1.9`、`v1.1.9-s12ryt`、`v1.1.9-s12rytCE`，皆指向 commit `996e859`）：
+  1. 前兩者：`Release <tag> already exists and is published. Immutable releases cannot be replaced.`（tag 已被推過且有已發佈 release）。
+  2. 第三者：release 確實建立並發佈，但最後拋 `GitHub published <tag> without immutable protection.`
+
+**根因**：
+- **不可變發佈（immutable releases）是 repo 的 opt-in 設定，fork 上為關閉**：
+  `gh api repos/s12ryt/vesta/immutable-releases` → `{"enabled":false,"enforced_by_owner":false}`；release 物件 `immutable:false`。
+  但原 workflow 於結尾硬性斷言 `$published.immutable` 必須為 true，故在 fork 上必失敗。
+- 已發佈的 tag 被重推時，原 workflow 於開頭硬性拋出「不可取代」錯誤。
+- 參考：`GET|PUT|DELETE /repos/{owner}/{repo}/immutable-releases`（check/enable/disable）。
+
+### 變更檔案
+
+1. `.github/workflows/release.yml`（重寫，改為自適應）
+   - 觸發新增 `workflow_dispatch`，輸入 `tag`（必填字串），可手動 (re)publish 既存 tag。
+   - job 層 `env: RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}`；checkout `with: ref: ${{ github.event.inputs.tag || github.ref }}`。
+   - Package / checksum / publish 步驟改用 `$env:RELEASE_TAG`（不再直接用 `github.ref_name`）。
+   - 發佈步驟更名 `Publish GitHub release`：
+     - 先探測 `$immutableEnabled`（`gh api .../immutable-releases`，關閉時 `Write-Warning`）。
+     - release 存在 + 已發佈 + immutable 啟用 → 仍硬性拋錯（維持嚴格行為）。
+     - release 存在 + 已發佈 + immutable 未啟用 → `gh release upload --clobber` + `gh release edit --notes-file`（原地更新）。
+     - release 不存在 → `gh release create --verify-tag --draft ...`。
+     - 資產驗證僅在 `$missingAssets.Count -ne 0` 時拋錯（不再要求 draft 狀態）。
+     - 僅在仍為 draft 時 `gh release edit --draft=false` 發佈。
+     - 結尾 readback 僅在 `$immutableEnabled -and -not $readback.immutable` 時拋錯。
+
+### 設計重點 / 風險
+
+- 對**上游 `Read1dno/vesta`（immutable 啟用）**行為不變：仍嚴格拒絕覆蓋已發佈 release，且仍驗證 immutable。
+- 對 **fork `s12ryt/vesta`（immutable 關閉）**：不再假設不可變，可正常建立／更新 release。
+- 未新增/刪除其他 workflow；`build.yml`、`pages.yml` 未動。
+- 若要以全新乾淨結果驗證，建議用**新 tag**（未發佈過）dispatch。
+
+### 驗證狀況
+
+- 本地：`git diff --stat`（1 file changed, 50 insertions(+), 16 deletions(-)）。
+- **待遠端驗證**：推送後確認 (a) `push` 到 `main` 會觸發 `Build`；(b) `gh workflow run release.yml -f tag=<new-tag>` 會 GREEN 且 release 帶 `vesta.exe`。
+- 仍未在本機編譯（環境缺 `cmake`/`cl`/`clangd`），惟 Build run 成功已證明可編譯。

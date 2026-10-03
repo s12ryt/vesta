@@ -80,3 +80,24 @@
 ### 備註
 - commit message 輕微錯字 `English/RУсский`（已推送，不重寫歷史）。
 - 仍未編譯驗證。
+
+## 2026-10-04 — T-004 修復 GitHub Actions Release workflow
+
+### 讀取 (Read)
+- `gh run list`：Build run `#37141266795`（workflow_dispatch）SUCCESS，artifact `vesta-windows-x64` 約 2.5MB；三個 Release run（`#37141683112` v1.1.9、`#37142225368` v1.1.9-s12ryt、`#37143008695` v1.1.9-s12rytCE）全 FAILURE。
+- `gh run view --log`：確認失敗訊息為 immutable release 相關（前兩者「already exists and is published」，第三者「published … without immutable protection」）。
+- `gh api repos/s12ryt/vesta/immutable-releases` → `{"enabled":false,"enforced_by_owner":false}`（fork 未啟用不可變發佈，即根因）。
+- `gh api repos/s12ryt/vesta/actions/permissions` → enabled:true。
+- 讀取 `.github/workflows/release.yml`（124 行）、`build.yml`、`pages.yml`、`CMakePresets.json`。
+
+### 寫入 (Write / Edit)
+1. `.github/workflows/release.yml`（重寫，50 insertions(+) / 16 deletions(-)）— 觸發新增 `workflow_dispatch`（input `tag`）；job `env RELEASE_TAG`；checkout ref 動態；發佈步驟改為自適應（探測 immutable；已發佈 release 在非 immutable 時原地更新；資產驗證不再要求 draft；readback 僅在 immutable 啟用時嚴格檢查）。
+2. 更新 `agent/deep_todos.md`（新增 T-004 列與詳情）、`agent/memory.md`（本節）。
+
+### 刪除 (Delete)
+- 無。
+
+### 驗證 (Verify)
+- 本地：`git diff --stat` = 1 file changed, 50 insertions(+), 16 deletions(-)。
+- **待遠端驗證**：推送後確認 push 觸發 Build；`gh workflow run release.yml -f tag=<new-tag>` GREEN 且 release 含 `vesta.exe`。
+- 本機仍缺 `cmake`/`cl`/`clangd`；惟 Build run 成功已證明原始碼可編譯。
