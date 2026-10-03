@@ -99,5 +99,5 @@
 
 ### 驗證 (Verify)
 - 本地：`git diff --stat` = 1 file changed, 50 insertions(+), 16 deletions(-)。
-- **待遠端驗證**：推送後確認 push 觸發 Build；`gh workflow run release.yml -f tag=<new-tag>` GREEN 且 release 含 `vesta.exe`。
+- **遠端已驗證**：推送 `7a7d51c` 後 Build run `#37146220497`（push）→ SUCCESS；`gh workflow run release.yml -f tag=v1.1.9-s12rytCE` → Release run `#37146236857` → SUCCESS；`gh release view v1.1.9-s12rytCE` 資產含 `vesta.exe`/`vesta.pdb`／forum zip／SHA256SUMS.txt，`draft:false`、`immutable:false`。
 - 本機仍缺 `cmake`/`cl`/`clangd`；惟 Build run 成功已證明原始碼可編譯。

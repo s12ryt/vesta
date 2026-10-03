@@ -215,5 +215,8 @@
 ### 驗證狀況
 
 - 本地：`git diff --stat`（1 file changed, 50 insertions(+), 16 deletions(-)）。
-- **待遠端驗證**：推送後確認 (a) `push` 到 `main` 會觸發 `Build`；(b) `gh workflow run release.yml -f tag=<new-tag>` 會 GREEN 且 release 帶 `vesta.exe`。
-- 仍未在本機編譯（環境缺 `cmake`/`cl`/`clangd`），惟 Build run 成功已證明可編譯。
+- **遠端已驗證（2026-10-04）**：
+  - 推送 `main`（commit `7a7d51c`）**成功觸發 Build** run `#37146220497` → **SUCCESS**（先前 push 不觸發僅因當下 Actions 尚未啟用）。
+  - 以 `gh workflow run release.yml -f tag=v1.1.9-s12rytCE` 觸發 Release run `#37146236857` → **SUCCESS**（修正前同一 tag 為 FAILURE）。
+  - `gh release view v1.1.9-s12rytCE`：`draft:false`、`immutable:false`、資產含 `vesta.exe`、`vesta.pdb`、`Vesta-v1.1.9-s12rytCE-forum.zip`、`SHA256SUMS.txt`、`LICENSE`、`NOTICE`、`THIRD_PARTY_NOTICES.md`。
+- 本機仍未編譯（環境缺 `cmake`/`cl`/`clangd`），惟 Build run 成功已證明原始碼可編譯。
