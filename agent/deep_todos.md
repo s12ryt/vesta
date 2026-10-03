@@ -17,6 +17,7 @@
 |----|------|------|------|
 | T-001 | 專案漢化（新增簡體中文介面語言 `zh`） | 已完成（未經編譯驗證） | 見下方詳情 |
 | T-002 | 新增繁體中文介面語言 `zh_hant`（含字型字形範圍） | 已完成（未經編譯驗證） | 見下方詳情 |
+| T-003 | 提交並推送漢化成果至 Operator 帳號的 `vesta` 倉庫 `main` | 已完成 | commit `513eae8` → `s12ryt/vesta` |
 
 ---
 
@@ -138,3 +139,32 @@
 
 - 以 `git diff --stat` 及逐檔覆核確認變更。
 - **未完成**：編譯驗證（環境同 T-001，缺 `cmake`/`cl`/`clangd`）。
+
+---
+
+## T-003 提交並推送至 Operator 帳號倉庫
+
+**來源需求**：Operator（m0071）「先推到我帳號下的vesta倉庫的main」。
+
+**目標**：將 T-001/T-002 全部未提交變更提交，並推送到 Operator GitHub 帳號（`s12ryt`）下的 `vesta` 倉庫 `main` 分支。
+
+**倉庫關係**：
+- `origin` = `https://github.com/Read1dno/vesta.git`（上游，無寫入權）。
+- 新增遠端 `myfork` = `https://github.com/s12ryt/vesta.git`（Operator 帳號的 fork，PUBLIC，預設分支 `main`）。
+- 推送前 `myfork/main` 落後上游數個 commit（在 `29bf273`）；本次推送為 fast-forward。
+
+**操作**：
+1. `gh auth status` 確認登入帳號 `s12ryt`（token scopes 含 `repo`、`workflow`）。
+2. `git add -A`（5 個修改檔 + 新增 `agent/` 三檔）。
+3. `git commit` → commit `513eae8`「feat(i18n): add Simplified and Traditional Chinese interface」（8 files changed, 1557 insertions(+), 7 deletions(-)）。
+4. `git remote add myfork https://github.com/s12ryt/vesta.git`。
+5. `git push myfork main` → `29bf273..513eae8  main -> main`（成功）。
+
+**結果**：
+- `s12ryt/vesta` 的 `main` 已更新至 `513eae8`（含上游 `release: Vesta 1.1.9` 與本次漢化）。
+- 本地 `main` 相對 `origin/main` 為 `ahead 1`。
+- fork 上另有既存分支 `feature/zh-cn-zh-tw-localization`（非本次操作產生）。
+
+**備註**：
+- commit message 有輕微錯字 `English/RУсский`（混用拉丁 R 與西里爾 Усский），已推送故不重寫歷史。
+- 仍未經編譯驗證（環境缺 `cmake`/`cl`/`clangd`）。

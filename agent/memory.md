@@ -54,3 +54,29 @@
 
 ### 驗證 (Verify)
 - 待補：`git diff --stat` 覆核、編譯（環境缺 `cmake`/`cl`/`clangd`，同 T-001）。
+
+## 2026-10-04 — T-003 提交並推送至 Operator 帳號倉庫
+
+### 讀取 (Read)
+- `git remote -v`：`origin` = `https://github.com/Read1dno/vesta.git`；分支 `main`；`git log` HEAD `466c634 release: Vesta 1.1.9`。
+- `gh auth status`：已登入 `s12ryt`（scopes: gist, read:org, repo, workflow）。
+- `gh repo view s12ryt/vesta`：PUBLIC fork，父層 `Read1dno/vesta`，預設分支 `main`。
+
+### 寫入 (Write / Edit)
+1. `git commit`（`git add -A` 全部變更）→ commit `513eae8`「feat(i18n): add Simplified and Traditional Chinese interface」，8 files changed、1557 insertions(+)、7 deletions(-)。
+2. 新增 git 遠端 `myfork` = `https://github.com/s12ryt/vesta.git`。
+3. `git push myfork main` → `29bf273..513eae8  main -> main`（成功 fast-forward）。
+4. 更新 `agent/deep_todos.md`（新增 T-003）、`agent/memory.md`（本節）。
+
+### 刪除 (Delete)
+- 無。
+
+### 驗證 (Verify)
+- `gh api repos/s12ryt/vesta/commits/main`：SHA = `513eae84dc1c674f10e716a1ee8e5f234d2955ce`。
+- `git rev-list --left-right --count myfork/main...origin/main` = `1  0`（本地相對上游 ahead 1）。
+- `git status -sb`：`## main...origin/main [ahead 1]`。
+- fork 分支列表：`main`、`feature/zh-cn-zh-tw-localization`（後者非本次產生）。
+
+### 備註
+- commit message 輕微錯字 `English/RУсский`（已推送，不重寫歷史）。
+- 仍未編譯驗證。
