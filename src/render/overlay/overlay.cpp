@@ -2034,6 +2034,54 @@ bool overlay_t::initialize_graphics()
 		this->m_fonts.menu_regular_12 = zdraw::add_font_from_file("C:/Windows/Fonts/segoeui.ttf", 16.0f * menu_dpi_scale);
 		this->m_fonts.menu_semibold_13 = zdraw::add_font_from_file("C:/Windows/Fonts/seguisb.ttf", 16.0f * menu_dpi_scale);
 		this->m_fonts.menu_brand_30 = zdraw::add_font_from_file("C:/Windows/Fonts/segoeuib.ttf", 38.0f * menu_dpi_scale);
+
+		// The Latin/Cyrillic fonts above carry no Chinese glyphs, so merge a CJK
+		// fallback into the fonts that render translated UI text. The glyph range
+		// is the set of characters the UI can actually emit (both Simplified and
+		// Traditional) plus the common Simplified set, which avoids building the
+		// full CJK atlas.
+		static constexpr const char *cjk_candidates[]{
+			"C:/Windows/Fonts/msyh.ttc",
+			"C:/Windows/Fonts/msyh.ttf",
+			"C:/Windows/Fonts/msjh.ttc",
+			"C:/Windows/Fonts/simhei.ttf",
+			"C:/Windows/Fonts/simsun.ttc",
+			"C:/Windows/Fonts/Deng.ttf",
+		};
+		const char *cjk_font = nullptr;
+		for ( const char *candidate : cjk_candidates )
+		{
+			if ( std::filesystem::exists( candidate ) )
+			{
+				cjk_font = candidate;
+				break;
+			}
+		}
+		if ( cjk_font )
+		{
+			ImFontGlyphRangesBuilder cjk_builder;
+			cjk_builder.AddText( render::localization::cjk_glyph_text( ) );
+			cjk_builder.AddRanges( atlas->GetGlyphRangesChineseSimplifiedCommon( ) );
+			static ImVector<ImWchar> cjk_range_storage;
+			cjk_builder.BuildRanges( &cjk_range_storage );
+			const ImWchar* cjk_ranges = cjk_range_storage.Data;
+			const auto merge_cjk = [ & ]( zdraw::font* target, float size_pixels, zdraw::font_raster_profile profile )
+			{
+				if ( target && target->im_font )
+				{
+					zdraw::merge_font_from_file( target, cjk_font, size_pixels, profile, cjk_ranges );
+				}
+			};
+			merge_cjk( this->m_fonts.notosans_medium_12, 12.0f, zdraw::font_raster_profile::smooth );
+			merge_cjk( this->m_fonts.esp_text_11, 11.0f, zdraw::font_raster_profile::esp_text );
+			merge_cjk( this->m_fonts.menu_regular_12, 16.0f * menu_dpi_scale, zdraw::font_raster_profile::smooth );
+			merge_cjk( this->m_fonts.menu_semibold_13, 16.0f * menu_dpi_scale, zdraw::font_raster_profile::smooth );
+		}
+		else
+		{
+			app::context().diagnostics.warning( "no Chinese font found; Chinese text may not render." );
+		}
+
 		const auto font_ready = []( const zdraw::font* font )
 		{
 			return font && font->im_font;
