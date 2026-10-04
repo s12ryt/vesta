@@ -205,3 +205,25 @@ Build run `37200449525`：**success**。
 ### 驗證 (Verify)
 - Select-String：aimbot Extreme Wall=1、localization Extreme Wall=3、penetration.cpp 已接設定、combat.hpp/settings.cpp 已含 extreme_wall
 - 尚未本地編譯（無 cmake/cl/clangd）；待 GitHub Actions Build（ctest 55/55，extreme 預設 false）
+
+## 2026-10-04 — T-008 反編譯取得本機 client.dll 的 CreateMove 簽名並內建至 DLL
+
+### 讀取 (Read)
+- `Get-Process cs2`（PID 29564、client.dll 基底 0x7FFD018E0000 / 大小 0x2998000）。
+- `src/core/memory/addresses.hpp`、`addresses.cpp`、`symbol.hpp`、`catalogs.hpp`（既有簽名樣式）。
+- `src/hvh/hvh_internal.hpp`、`src/hvh/dllmain.cpp`（`game_offsets` / `offsets()`）。
+- 社群來源：cs2_signature_atlas.h、wisnurafi/cs2-hax offsets.h、G4sp4rCS/CS2-ESP-WH-Custom visuals.h。
+
+### 寫入 (Write / Edit)
+- 複製 `client.dll` 至 `C:\Users\yoyo2\AppData\Local\Temp\opencode\client.dll`。
+- 分析腳本：`scan_client.ps1`、`scan_cm.ps1`、`scan_cm2.ps1`、`scan_cm3.ps1`、`xref_scan.ps1`、`vtable_scan.ps1`、`vtable_dump.ps1`。
+- `src/hvh/dllmain.cpp`：`offsets()` 內建 CreateMove 簽名 `48 8B C4 4C 89 40 18 48 89 48 08 55 53 57 41 55`。
+- `agent/deep_todos.md`、`agent/memory.md`：本紀錄。
+
+### 刪除 (Delete)
+- 無。
+
+### 驗證 (Verify)
+- 樣式掃描：Vesta 既有五個樣式各 1 命中；本版 CreateMove 序文唯一命中 RVA 0xD01B20。
+- 虛擬表列舉：起點 0x1C9AD58；idx 5 CreateMovePrePrediction、idx 8 ValidateInput、idx 25 CreateMove。
+- 提交 `f1bd6a6` 並推送 `myfork/main`（`1919bd8..f1bd6a6`）；待 CI（未經本機編譯）。
