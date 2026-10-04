@@ -40,10 +40,24 @@ namespace vesta::hvh::features
 			// Anti-aim math is only meaningful once we know where the command
 			// viewangles live. Until a build-verified signature is supplied this
 			// path stays inert instead of writing to a guessed address.
+			const bool antiaim = config.enable_antiaim != 0;
+			const bool silent = config.enable_silent != 0;
+			if ( !antiaim && !silent )
+			{
+			return result;
+			}
+			if ( g_shared->sigs.input[ 0 ] == '\0' )
+			{
+			return result;
+			}
 			if ( config.enable_antiaim != 0 )
 			{
 				g_spin = wrap_angle( g_spin + static_cast<float>( config.aa_spin_speed ) );
-				(void)g_spin;
+				( void )g_spin;
+			if ( silent )
+			{
+			g_spin = wrap_angle( g_spin + static_cast<float>( config.silent_fov ) );
+			}
 			}
 
 			return result;
@@ -103,14 +117,15 @@ namespace vesta::hvh::features
 		g_shared->state.signature_found = 0;
 
 		const auto& table = offsets( );
-		if ( table.create_move_sig[ 0 ] == '\0' )
+		const char* signature = g_shared->sigs.create_move[ 0 ] != '\0' ? g_shared->sigs.create_move : table.create_move_sig;
+		if ( signature[ 0 ] == '\0' )
 		{
 			g_shared->state.last_error = -2;
 			log_line( "create_move signature is not configured; module is passive" );
 			return false;
 		}
 
-		auto* target = scan_pattern( client, client_size, table.create_move_sig );
+		auto* target = scan_pattern( client, client_size, signature );
 		if ( !target )
 		{
 			g_shared->state.last_error = -3;

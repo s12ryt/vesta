@@ -157,6 +157,21 @@ void menu_t::draw_hvh()
         toggle_int("Auto Stop", s.enable_auto_stop);
     });
 
+    card_in_column("hvh_silent", "SILENT AIM", 7, 0, [&] {
+        toggle_int("Enable Silent Aim", s.enable_silent);
+        select_int("Hitbox", s.silent_hitbox, hitbox_modes);
+        select_int("Priority", s.silent_priority, priority_modes);
+        slider_int("FOV", s.silent_fov, 1, 180, " deg");
+        slider_int("Min Damage", s.silent_min_damage, 1, 100);
+        toggle_int("Auto Fire", s.silent_autofire);
+        toggle_int("PSilent", s.silent_psilent);
+    });
+
+    card_in_column("hvh_accuracy", "ACCURACY", 2, 0, [&] {
+        toggle_int("No Spread", s.enable_nospread);
+        toggle_int("No Recoil", s.enable_norecoil);
+    });
+
     end_cards();
     ImGui::EndChild();
     ImGui::PopStyleVar();

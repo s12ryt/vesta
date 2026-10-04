@@ -20,6 +20,7 @@
 | T-003 | 提交並推送漢化成果至 Operator 帳號的 `vesta` 倉庫 `main` | 已完成 | commit `513eae8` → `s12ryt/vesta` |
 | T-004 | 修復 GitHub Actions Release workflow（讓 tag 推送能正確產出／發佈 exe） | 已完成（待遠端驗證） | 見下方詳情 |
 | T-005 | 新增 HVH 類別（確認後注入 vesta_hvh.dll 並提供 HvH 功能） | 已完成（未經編譯驗證） | 見下方詳情 |
+| T-006 | 內部靜默瞄準增量（shared v2、簽名通道、UI 卡片、持久化） | 已完成（未經編譯驗證） | 見下方詳情 |
 
 ---
 
@@ -266,3 +267,23 @@
 ### 驗證情況
 - 以 `git diff --stat` 與 Select-String 檢視變更；CRLF / 無 BOM 檢查。
 - **未經編譯驗證**：本機無 `cmake`/`cl`/`clangd`；待推送到 `s12ryt/vesta` main 由 GitHub Actions Build workflow 驗證。
+
+
+## T-006 內部靜默瞄準增量
+
+**來源需求**：Operator（m0235）在「魔法子彈」可行性問答後選擇「2」＝改走內部路線（DLL 注入 + CreateMove hook 寫視角），整合進既有 HVH 面板。
+
+**目標**：把「靜默瞄準 / 無擴散」的設定、簽名傳遞與 UI 接通，使注入後的 DLL 能在取得正確簽名時對 CUserCmd 寫入視角；在沒有簽名時保持被動、不崩潰。
+
+**設計**：
+- 共享契約 `src/hvh_shared/hvh_shared.hpp` 升級為 version 2：新增 `k_signature_length = 160`；`settings` 新增 silent（enable_silent, silent_hitbox, silent_priority, silent_fov, silent_autofire, silent_psilent, silent_min_damage）與 accuracy（enable_nospread, enable_norecoil）；新增 `struct signatures { char create_move[160]; char input[160]; char entity_list[160]; }`；`shared_state` 介於 config 與 state 之間加入 `signatures sigs`。
+- 外部控制器 `features/hvh`：新增 `signatures signatures{}` 成員；ensure_mapping()/publish()/inject() 會把 signatures 寫入映射；load()/save() 從 `hvh.json` 的 `signatures` 物件讀寫 create_move/input/entity_list。
+- DLL `hvh_features.cpp`：`initialize()` 優先使用 `g_shared->sigs.create_move`（為空時回退 `offsets().create_move_sig`）；detour 在 enable_antiaim 或 enable_silent 為真、且 `sigs.input` 非空時才動作，否則保持被動。
+- UI `hvh_page.cpp`：新增 SILENT AIM 卡片（7 列）與 ACCURACY 卡片（2 列）。
+- `localization.cpp`：chinese() 與 traditional() 各新增 6 條（SILENT AIM/ACCURACY/Enable Silent Aim/PSilent/No Spread/No Recoil）。
+
+**修改檔案**：src/hvh_shared/hvh_shared.hpp、src/features/hvh/hvh.hpp、src/features/hvh/hvh.cpp、src/hvh/hvh_features.cpp、src/render/menu/hvh_page.cpp、src/render/menu/localization.cpp。
+
+**驗證狀態**：未經本地編譯驗證（無 cmake/cl/clangd，僅 vswhere.exe）；待 GitHub Actions Build。
+
+**已知限制**：簽名在出貨時為空 → 注入後的 DLL 仍為被動，真正的靜默瞄準需提供對應此 CS2 版本的 CreateMove/CUserCmd 簽名（目前無實機 client.dll 可推導）。

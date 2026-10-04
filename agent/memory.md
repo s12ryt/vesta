@@ -153,3 +153,30 @@ Build run `37200449525`：**success**。
 - `vesta.vcxproj -> build/bin/vesta.exe`
 - ctest 55/55 全部通過。
 - artifact `vesta-windows-x64`（2,520,120 bytes）已上傳。
+
+
+## 2026-10-04 — T-006 內部靜默瞄準增量
+
+### 讀取 (Read)
+- src/hvh_shared/hvh_shared.hpp、src/features/hvh/hvh.hpp、src/hvh/hvh_features.hpp
+- src/features/hvh/hvh.cpp
+- src/hvh/hvh_features.cpp
+- src/render/menu/hvh_page.cpp
+
+### 寫入 (Write / Edit)
+- `src/hvh_shared/hvh_shared.hpp`：version 1→2；新增 `k_signature_length`、silent/accuracy 設定區塊、`struct signatures`、`shared_state.sigs`。
+- `src/features/hvh/hvh.hpp`：新增 `vesta::hvh_shared::signatures signatures{};`。
+- `src/features/hvh/hvh.cpp`：加入 `#include <cstdio>`；三處 `m_view->config = settings;` 後補 `m_view->sigs = signatures;`；load()/save() 新增 silent/accuracy 欄位與 signatures 物件。
+- `src/hvh/hvh_features.cpp`：initialize() 改用 `g_shared->sigs.create_move`（回退 offsets()）；detour 以 antiaim/silent 與 `sigs.input` 為閘。
+- `src/render/menu/hvh_page.cpp`：新增 SILENT AIM（7 列）與 ACCURACY（2 列）卡片。
+- `src/render/menu/localization.cpp`：chinese()/traditional() 各新增 6 條。
+- 編輯腳本：edit_hvh_cpp.ps1、edit_hvh_features.ps1、apply_silent_ui.ps1（C:\Users\yoyo2\AppData\Local\Temp\opencode\）。
+
+### 刪除 (Delete)
+- `src/hvh_shared/hvh_shared.hpp` 曾以 Remove-Item 刪除後重寫（版本升級）。
+
+### 驗證 (Verify)
+- Select-String 計數：sigs 鏡射×3、enable_silent×5、signatures.create_move×2、include cstdio×1。
+- hvh_features.cpp 套用後 `nl=lf len=4297`；行 44/45/57/59/120/121/128 確認。
+- apply_silent_ui.ps1：page_silent=1、page_accuracy=1、page_enable_silent=1、loc_SILENT=2、loc_PSilent=2、zh_anchor=1、tw_anchor=1。
+- 尚未本地編譯；待 Build workflow。

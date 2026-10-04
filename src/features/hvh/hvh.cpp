@@ -1,5 +1,6 @@
 #include <stdafx.hpp>
 #include <external/json.hpp>
+#include <cstdio>
 
 #include <features/hvh/hvh.hpp>
 
@@ -60,6 +61,7 @@ namespace features::hvh {
 			*m_view = vesta::hvh_shared::shared_state{};
 		}
 		m_view->config = settings;
+		m_view->sigs = signatures;
 		m_view->state.unload_request = 0;
 		return true;
 	}
@@ -102,6 +104,7 @@ namespace features::hvh {
 		}
 		// Only the config half is written so the DLL's status half is preserved.
 		m_view->config = settings;
+		m_view->sigs = signatures;
 	}
 
 	inject_status controller_t::status( ) const
@@ -174,6 +177,7 @@ namespace features::hvh {
 		}
 		m_view->state.unload_request = 0;
 		m_view->config = settings;
+		m_view->sigs = signatures;
 
 		const auto pid = static_cast<DWORD>( app::context().process.process_id( ) );
 		if ( pid == 0 )
@@ -356,6 +360,15 @@ namespace features::hvh {
 		settings.rage_min_damage = get( "rage_min_damage", settings.rage_min_damage );
 		settings.rage_visible_only = get( "rage_visible_only", settings.rage_visible_only );
 		settings.rage_target_key = get( "rage_target_key", settings.rage_target_key );
+		settings.enable_silent = get( "enable_silent", settings.enable_silent );
+		settings.silent_hitbox = get( "silent_hitbox", settings.silent_hitbox );
+		settings.silent_priority = get( "silent_priority", settings.silent_priority );
+		settings.silent_fov = get( "silent_fov", settings.silent_fov );
+		settings.silent_autofire = get( "silent_autofire", settings.silent_autofire );
+		settings.silent_psilent = get( "silent_psilent", settings.silent_psilent );
+		settings.silent_min_damage = get( "silent_min_damage", settings.silent_min_damage );
+		settings.enable_nospread = get( "enable_nospread", settings.enable_nospread );
+		settings.enable_norecoil = get( "enable_norecoil", settings.enable_norecoil );
 
 		settings.enable_trigger = get( "enable_trigger", settings.enable_trigger );
 		settings.trigger_delay_ms = get( "trigger_delay_ms", settings.trigger_delay_ms );
@@ -377,6 +390,7 @@ namespace features::hvh {
 
 		settings.enable_bhop = get( "enable_bhop", settings.enable_bhop );
 		settings.enable_auto_stop = get( "enable_auto_stop", settings.enable_auto_stop );
+		if ( j.contains( "signatures" ) && j[ "signatures" ].is_object( ) ) 		{ 			const auto& sigs = j[ "signatures" ]; 			const auto read_sig = [ &sigs ]( const char* key, char ( &dst )[ vesta::hvh_shared::k_signature_length ] ) 			{ 				const auto it = sigs.find( key ); 				if ( it != sigs.end( ) && it->is_string( ) ) 				{ 					const auto value = it->get<std::string>( ); 					std::snprintf( dst, vesta::hvh_shared::k_signature_length, "%s", value.c_str( ) ); 				} 			}; 			read_sig( "create_move", signatures.create_move ); 			read_sig( "input", signatures.input ); 			read_sig( "entity_list", signatures.entity_list ); 		}
 	}
 
 	void controller_t::save( )
@@ -399,6 +413,15 @@ namespace features::hvh {
 			{ "rage_min_damage", settings.rage_min_damage },
 			{ "rage_visible_only", settings.rage_visible_only },
 			{ "rage_target_key", settings.rage_target_key },
+			{ "enable_silent", settings.enable_silent },
+			{ "silent_hitbox", settings.silent_hitbox },
+			{ "silent_priority", settings.silent_priority },
+			{ "silent_fov", settings.silent_fov },
+			{ "silent_autofire", settings.silent_autofire },
+			{ "silent_psilent", settings.silent_psilent },
+			{ "silent_min_damage", settings.silent_min_damage },
+			{ "enable_nospread", settings.enable_nospread },
+			{ "enable_norecoil", settings.enable_norecoil },
 			{ "enable_trigger", settings.enable_trigger },
 			{ "trigger_delay_ms", settings.trigger_delay_ms },
 			{ "trigger_hitchance", settings.trigger_hitchance },
@@ -417,6 +440,7 @@ namespace features::hvh {
 			{ "aa_lby_mode", settings.aa_lby_mode },
 			{ "enable_bhop", settings.enable_bhop },
 			{ "enable_auto_stop", settings.enable_auto_stop },
+			{ "signatures", { 				{ "create_move", std::string( signatures.create_move ) }, 				{ "input", std::string( signatures.input ) }, 				{ "entity_list", std::string( signatures.entity_list ) }, 			} },
 		};
 
 		std::ofstream out( m_directory / k_config_name );

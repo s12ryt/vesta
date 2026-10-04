@@ -36,6 +36,7 @@ namespace features::hvh {
 		void save( );
 
 		vesta::hvh_shared::settings settings{};
+		vesta::hvh_shared::signatures signatures{};
 
 	private:
 		bool ensure_mapping( );
