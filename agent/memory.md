@@ -132,3 +132,24 @@
 ### 驗證 (Verify)
 - `git diff --stat`、Select-String 逐檔確認插入位置；localization.cpp 檢查無 BOM、CRLF、碼位（状/态/態/狀）存在。
 - **未經編譯驗證**：本機無 `cmake`/`cl`/`clangd`（僅 `vswhere.exe`）。待推送 `s12ryt/vesta` main，由 GitHub Actions Build workflow 驗證 exe 與 `vesta_hvh.dll` 均可建置。
+
+
+## 2026-10-04 — T-005 修正：CI 建置失敗與命名空間
+
+### 背景
+首次 push（commit `2451b65`）觸發 Build run `37200193822` 失敗：`vesta_hvh.dll` 建置成功，但 `vesta.exe` 編譯失敗。
+
+### 原因
+`src/features/hvh/hvh.hpp` / `hvh.cpp` 直接使用未限定的 `hvh_shared::…`，但共享標頭定義於 `namespace vesta::hvh_shared`，在 `features::hvh` 內無法以 `hvh_shared` 名稱可見（`C2653 'hvh_shared': is not a class or namespace name` 等）。
+
+### 修正
+- 將 `src/features/hvh/hvh.hpp`、`src/features/hvh/hvh.cpp` 內所有 `hvh_shared::` 改為 `vesta::hvh_shared::`。
+- `src/hvh/dllmain.cpp` 第 328 行改為 `(void)patch( ... )`，消除 C4834（丟棄 [[nodiscard]] 回傳值）。
+- commit `ed494cb`，push 至 `s12ryt/vesta` 的 `main`。
+
+### 驗證
+Build run `37200449525`：**success**。
+- `vesta_hvh.vcxproj -> build/bin/vesta_hvh.dll`
+- `vesta.vcxproj -> build/bin/vesta.exe`
+- ctest 55/55 全部通過。
+- artifact `vesta-windows-x64`（2,520,120 bytes）已上傳。
