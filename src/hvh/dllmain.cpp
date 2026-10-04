@@ -336,7 +336,7 @@ namespace vesta::hvh
 
 	const game_offsets& offsets( )
 	{
-		static const game_offsets table{};
+		static const game_offsets table{ "48 8B C4 4C 89 40 18 48 89 48 08 55 53 57 41 55" };
 		return table;
 	}
 }
