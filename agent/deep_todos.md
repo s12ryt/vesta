@@ -19,6 +19,7 @@
 | T-002 | 新增繁體中文介面語言 `zh_hant`（含字型字形範圍） | 已完成（未經編譯驗證） | 見下方詳情 |
 | T-003 | 提交並推送漢化成果至 Operator 帳號的 `vesta` 倉庫 `main` | 已完成 | commit `513eae8` → `s12ryt/vesta` |
 | T-004 | 修復 GitHub Actions Release workflow（讓 tag 推送能正確產出／發佈 exe） | 已完成（待遠端驗證） | 見下方詳情 |
+| T-005 | 新增 HVH 類別（確認後注入 vesta_hvh.dll 並提供 HvH 功能） | 已完成（未經編譯驗證） | 見下方詳情 |
 
 ---
 
@@ -220,3 +221,48 @@
   - 以 `gh workflow run release.yml -f tag=v1.1.9-s12rytCE` 觸發 Release run `#37146236857` → **SUCCESS**（修正前同一 tag 為 FAILURE）。
   - `gh release view v1.1.9-s12rytCE`：`draft:false`、`immutable:false`、資產含 `vesta.exe`、`vesta.pdb`、`Vesta-v1.1.9-s12rytCE-forum.zip`、`SHA256SUMS.txt`、`LICENSE`、`NOTICE`、`THIRD_PARTY_NOTICES.md`。
 - 本機仍未編譯（環境缺 `cmake`/`cl`/`clangd`），惟 Build run 成功已證明原始碼可編譯。
+
+
+---
+
+## T-005 新增 HVH 類別（注入式 HvH 功能）
+
+**來源需求**：Operator（m0128）「那就在ui中新增一個類別叫做hvh,點擊後要在彈出一個確認鍵,然後開始注入遊戲並提供這些hvh都有的功能,暴力鎖之類的」。
+
+**目標**：在選單側邊欄新增「HVH」頁面；點擊 Inject 後彈出確認，確認後把 `vesta_hvh.dll` 注入 CS2，並提供 HvH 功能（狂暴鎖 / 反瞄準 / 板機 / 連跳等）。
+
+**架構決定**：
+- 外部 exe 仍為主要程式；HVH 功能需寫入 `CUserCmd.viewangles`，屬內部（internal）能力，因此以「外部注入自有 DLL」達成，不動既有純外部架構。
+- 設定透過具名共享記憶體 `Local\vesta_hvh_shared_v1`（`vesta_hvh_shared` POD 結構）在 exe（writer）與 DLL（reader）間交換。
+- HVH 設定獨立存於 `<exe 目錄>/hvh.json`（nlohmann），**不改** `config/settings.cpp`。
+- DLL 針對 build 版本：以特徵碼掃描定位 `CreateMove`；**目前特徵碼故意留空**，故 hook 不會安裝、模組保持被動，確保未知版本不會寫到錯誤位址、不會崩潰。
+
+### 變更檔案
+
+新增：
+1. `src/hvh_shared/hvh_shared.hpp`：POD 共享結構 + 具名 mapping 常數（僅 `<cstdint>`）。
+2. `src/features/hvh/hvh.hpp` / `hvh.cpp`：`features::hvh::controller()`——開啟具名 mapping、`inject()`（OpenProcess + VirtualAllocEx + WriteProcessMemory + CreateRemoteThread(LoadLibraryW)）、`eject()`、`publish()`、`load()/save()`。
+3. `src/hvh/hvh_internal.hpp`：logging、`module_base`、`scan_pattern`、`readable/writable/patch`、`inline_hook`（5-byte rel32 JMP + trampoline）、`offsets()`。
+4. `src/hvh/dllmain.cpp`：DllMain + worker thread（心跳、unload 時 `FreeLibraryAndExitThread`）。
+5. `src/hvh/hvh_features.hpp` / `hvh_features.cpp`：`initialize/shutdown`、`advance_spin`、`jitter_angle`、`apply_pitch`、`create_move_detour`。
+6. `src/render/menu/hvh_page.cpp`：`menu_t::draw_hvh()` UI。
+
+修改：
+7. `src/render/menu/menu.hpp`：宣告 `void draw_hvh();`、`bool m_hvh_inject_pending{};`。
+8. `src/render/menu/menu.cpp`：側邊欄標籤加入 `"HVH"`（索引 4），`draw_content()` 分派 `draw_hvh()`。
+9. `src/render/menu/layout.cpp`：`draw_nav_icon` 新增 `icon == 4` 圖示（交叉劍）。
+10. `src/render/menu/localization.cpp`：`chinese()` / `traditional()` 加入 HVH 字串（各 55 條）。
+11. `src/app/workers.hpp` / `workers.cpp`：新增 `hvh()` 執行緒（週期呼叫 `controller().publish()`）。
+12. `src/app/main.cpp`：啟動 `app::workers::hvh`。
+13. `CMakeLists.txt`：`vesta_sources` 加入 `src/features/hvh/hvh.cpp`、`src/render/menu/hvh_page.cpp`；新增 `vesta_hvh` SHARED target。
+
+### 設計要點 / 限制
+- HVH 頁面需先確認才會注入（`m_hvh_inject_pending` → CONFIRM INJECTION 卡片）。
+- 注入需對目標 `OpenProcess` 具 `PROCESS_CREATE_THREAD|QUERY_INFORMATION|VM_OPERATION|VM_WRITE|VM_READ`；`vesta_hvh.dll` 必須與 exe 同目錄（`build/bin`）。
+- `vesta_hvh` DLL 不使用 vesta 前置編譯標頭（PCH），僅連結 `user32`。
+- 真實暴力鎖 / 反瞄準需正確的 offsets/signatures；現階段數學與注入管線完整，特徵碼留空，待日後補上。
+- 風險：注入與 hook 提高被 VAC 偵測的面；未注入時所有 HVH 功能不生效。
+
+### 驗證情況
+- 以 `git diff --stat` 與 Select-String 檢視變更；CRLF / 無 BOM 檢查。
+- **未經編譯驗證**：本機無 `cmake`/`cl`/`clangd`；待推送到 `s12ryt/vesta` main 由 GitHub Actions Build workflow 驗證。

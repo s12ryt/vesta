@@ -13,6 +13,7 @@
 #include <simulation/shot_state.hpp>
 #include <simulation/seed_schedule.hpp>
 #include <features/visuals/visuals.hpp>
+#include <features/hvh/hvh.hpp>
 
 namespace app::workers {
 
@@ -572,6 +573,16 @@ namespace app::workers {
             precise_wait(simulation::seed_schedule::poll_interval(
                 can_run && runtime.input_pending(),
                 can_run && configured && latency_requested));
+		}
+	}
+
+	void hvh( )
+	{
+		for ( ;; )
+		{
+			auto& ctrl = features::hvh::controller( );
+			ctrl.publish( );
+			std::this_thread::sleep_for( std::chrono::milliseconds( 16 ) );
 		}
 	}
 

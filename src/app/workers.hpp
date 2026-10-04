@@ -9,6 +9,7 @@ namespace app::workers {
 	void movement( );
 	void combat( );
 	void nade_helper( );
+	void hvh( );
 	void seed_trigger( );
 	void watchdog( );
 

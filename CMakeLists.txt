@@ -91,6 +91,7 @@ set(vesta_sources
 	 src/features/misc/auto_stop.cpp
     src/features/misc/bhop.cpp
     src/features/misc/nade_helper.cpp
+    src/features/hvh/hvh.cpp
 
     # render
     src/render/chams/animation.cpp
@@ -112,6 +113,7 @@ set(vesta_sources
     src/render/menu/triggerbot_page.cpp
     src/render/menu/visuals_page.cpp
     src/render/menu/misc_page.cpp
+    src/render/menu/hvh_page.cpp
     src/render/overlay/input.cpp
     src/render/overlay/overlay.cpp
     src/render/overlay/hud.cpp
@@ -266,6 +268,22 @@ list(FILTER lua_sources EXCLUDE REGEX "/(lua|luac|onelua)\\.c$")
 add_library(vesta_lua STATIC ${lua_sources})
 target_include_directories(vesta_lua PUBLIC ${lua_SOURCE_DIR}/src)
 target_link_libraries(${PROJECT_NAME} PRIVATE vesta_lua)
+
+# Injector payload: a self-contained DLL loaded into the game at runtime. It
+# avoids the vesta precompiled header and links only the Win32 API it needs.
+add_library(vesta_hvh SHARED
+    src/hvh/dllmain.cpp
+    src/hvh/hvh_features.cpp
+)
+target_include_directories(vesta_hvh PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+if(MSVC)
+    target_compile_options(vesta_hvh PRIVATE /utf-8)
+endif()
+target_link_libraries(vesta_hvh PRIVATE user32)
+set_target_properties(vesta_hvh PROPERTIES
+    OUTPUT_NAME "vesta_hvh"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/bin"
+)
 
 FetchContent_Declare(
     freetype

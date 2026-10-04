@@ -32,6 +32,7 @@ class menu_t
     void draw_triggerbot();
     void draw_visuals();
     void draw_misc();
+    void draw_hvh();
     void reset_content_animation();
 
     std::atomic<bool> m_open{};
@@ -42,6 +43,7 @@ class menu_t
     int m_weapon_group{-1};
     int m_visual_group{};
     int m_misc_group{};
+    bool m_hvh_inject_pending{};
     float m_content_animation{1.0f};
     float m_visual_editor_animation{};
 };

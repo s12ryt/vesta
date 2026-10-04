@@ -101,3 +101,34 @@
 - 本地：`git diff --stat` = 1 file changed, 50 insertions(+), 16 deletions(-)。
 - **遠端已驗證**：推送 `7a7d51c` 後 Build run `#37146220497`（push）→ SUCCESS；`gh workflow run release.yml -f tag=v1.1.9-s12rytCE` → Release run `#37146236857` → SUCCESS；`gh release view v1.1.9-s12rytCE` 資產含 `vesta.exe`/`vesta.pdb`／forum zip／SHA256SUMS.txt，`draft:false`、`immutable:false`。
 - 本機仍缺 `cmake`/`cl`/`clangd`；惟 Build run 成功已證明原始碼可編譯。
+
+
+## 2026-10-04 — T-005 新增 HVH 類別（注入式 HvH 功能）
+
+### 讀取 (Read)
+- 遍歷 `src/render/menu/`（menu.cpp / menu.hpp / internal.hpp / layout.cpp / misc_page.cpp / combat_page.cpp / widgets.cpp）、`src/app/`（context.hpp / workers.hpp / workers.cpp / main.cpp）、`src/config/misc.hpp`、`src/config/settings.hpp`、`src/core/memory/process.hpp`、`src/core/memory/modules.hpp`、`CMakeLists.txt`、`CMakePresets.json`。
+- 確認 include 根目錄為 `src/`（`#include <external/json.hpp>`、`#include <render/...>`）；`menu_t` 為全域類別；`card_in_column` / `button_row` / `select_row` / `toggle_row` / `slider_row` 等 API。
+
+### 寫入 (Write / Edit)
+新增：
+1. `src/hvh_shared/hvh_shared.hpp`
+2. `src/features/hvh/hvh.hpp`、`src/features/hvh/hvh.cpp`
+3. `src/hvh/hvh_internal.hpp`、`src/hvh/dllmain.cpp`
+4. `src/hvh/hvh_features.hpp`、`src/hvh/hvh_features.cpp`
+5. `src/render/menu/hvh_page.cpp`
+
+修改：
+6. `src/render/menu/menu.hpp`（`draw_hvh()`、`m_hvh_inject_pending`）
+7. `src/render/menu/menu.cpp`（側邊欄第 5 項 HVH；`draw_content` 分派）
+8. `src/render/menu/layout.cpp`（`draw_nav_icon` icon 4）
+9. `src/render/menu/localization.cpp`（`chinese()` / `traditional()` 各 +55 條 HVH 字串）
+10. `src/app/workers.hpp`、`src/app/workers.cpp`（`hvh()` 執行緒）
+11. `src/app/main.cpp`（啟動 hvh 執行緒）
+12. `CMakeLists.txt`（加入來源；新增 `vesta_hvh` SHARED target）
+
+### 刪除 (Delete)
+- 無（僅以 `Remove-Item` 重寫過自己建立的 `hvh_shared.hpp`，因 write 工具拒寫既有檔）。
+
+### 驗證 (Verify)
+- `git diff --stat`、Select-String 逐檔確認插入位置；localization.cpp 檢查無 BOM、CRLF、碼位（状/态/態/狀）存在。
+- **未經編譯驗證**：本機無 `cmake`/`cl`/`clangd`（僅 `vswhere.exe`）。待推送 `s12ryt/vesta` main，由 GitHub Actions Build workflow 驗證 exe 與 `vesta_hvh.dll` 均可建置。

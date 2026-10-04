@@ -174,6 +174,7 @@ int main(int argc, char** argv)
 		std::thread( app::workers::movement ).detach( );
 		std::thread( app::workers::combat ).detach( );
 		std::thread( app::workers::nade_helper ).detach( );
+		std::thread( app::workers::hvh ).detach( );
 		std::thread( app::workers::seed_trigger ).detach( );
 #if defined( VESTA_ENABLE_CONSOLE ) && VESTA_ENABLE_CONSOLE
 		std::thread( app::workers::watchdog ).detach( );
