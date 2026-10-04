@@ -179,7 +179,7 @@ namespace simulation {
 		const auto passage = detail::pass_through_world(
 			collision, target_distance, m_weapon_data.penetration,
 			m_weapon_data.damage, m_weapon_data.range_modifier,
-			allow_penetration );
+			allow_penetration, config::combat_settings.global.extreme_wall );
 		if ( !passage )
 		{
 			return false;

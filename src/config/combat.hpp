@@ -190,6 +190,7 @@ namespace config {
 			int aimbot_smoothing{ 5 };
 			int aimbot_humanize{ 35 };
 			bool aimbot_autowall{ true };
+			bool extreme_wall{ false };
 			float aimbot_min_damage{ 65.0f };
 			bool aimbot_min_damage_override_enabled{ true };
 			float aimbot_min_damage_override{ 10.0f };

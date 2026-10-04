@@ -21,6 +21,7 @@
 | T-004 | 修復 GitHub Actions Release workflow（讓 tag 推送能正確產出／發佈 exe） | 已完成（待遠端驗證） | 見下方詳情 |
 | T-005 | 新增 HVH 類別（確認後注入 vesta_hvh.dll 並提供 HvH 功能） | 已完成（未經編譯驗證） | 見下方詳情 |
 | T-006 | 內部靜默瞄準增量（shared v2、簽名通道、UI 卡片、持久化） | 已完成（未經編譯驗證） | 見下方詳情 |
+| T-007 | 新增可選「極限穿牆」(Extreme Wall) 自動穿牆模式 | 已完成（未經編譯驗證） | 見下方詳情 |
 
 ---
 
@@ -287,3 +288,33 @@
 **驗證狀態**：未經本地編譯驗證（無 cmake/cl/clangd，僅 vswhere.exe）；待 GitHub Actions Build。
 
 **已知限制**：簽名在出貨時為空 → 注入後的 DLL 仍為被動，真正的靜默瞄準需提供對應此 CS2 版本的 CreateMove/CUserCmd 簽名（目前無實機 client.dll 可推導）。
+
+## T-007 可選「極限穿牆」自動穿牆增強
+
+**來源需求**：Operator（m0289）「hvh的"自動穿牆"功能要更極限」。
+
+**目標**：在不破壞既有彈道測試的前提下，讓外部自動穿牆（aimbot 的子彈穿透模擬）可以有更強的穿牆後傷害保留，作為一個可選開關。
+
+**設計**：
+- 穿牆核心在 `src/simulation/penetration_solver.hpp` 的 `pass_through_world(...)`。原生限制（最多穿透 4 個面、距離上限 3000）屬遊戲引擎限制，保持不變。
+- 新增尾端參數 `bool extreme = false`：預設 false 時數學與原本「逐位元相同」，因此既有測試（tests/penetration_accuracy.cpp、tests/penetration_segments.cpp）不受影響；true 時降低每面傷害損失：
+  - 損失除數 24 → 60
+  - 武器損失 `(3.0f / weapon_penetration) * 1.25f` → `(2.0f / weapon_penetration)`
+  - 武器損失倍率 3.0f → 1.5f
+  - 預設 damage_fraction 0.16f → 0.10f（材質特例 0.05 / 0.00001 不變）
+- 以設定驅動：`config::combat_profile::global_settings` 新增 `bool extreme_wall{ false };`，於 settings.cpp 的 global to_json/from_json 序列化。
+- `src/simulation/penetration.cpp` 的 `run_seed` 將 `config::combat_settings.global.extreme_wall` 傳入 `pass_through_world`（`can()` 維持舊數學）。
+- UI：aimbot 全域 `PENETRATION` 卡片新增 `Extreme Wall` 開關（列數 3 → 4）。
+- 在地化：localization.cpp 新增 ru/zh/tw 三筆 `Extreme Wall`。
+
+**變更檔案**：
+- src/simulation/penetration_solver.hpp（新增 gated extreme 參數與分支常數）
+- src/simulation/penetration.cpp（run_seed 傳入設定）
+- src/config/combat.hpp（global_settings.extreme_wall）
+- src/config/settings.cpp（to_json/from_json）
+- src/render/menu/aimbot_page.cpp（PENETRATION 卡片開關）
+- src/render/menu/localization.cpp（ru/zh/tw）
+
+**驗證狀態**：尚未本地編譯（無 cmake/cl/clangd）；已以 Select-String 確認：aimbot Extreme Wall=1、localization Extreme Wall=3、penetration.cpp 已接上設定、combat.hpp/settings.cpp 已含 extreme_wall。待 GitHub Actions Build 驗證（extreme 預設 false，兩支穿牆測試仍應通過）。
+
+**已知限制**：屬外部子彈穿透模擬的傷害保留增強；不改變引擎原生穿透上限（4 面 / 3000）。與 HVH DLL（內部簽名）無關。

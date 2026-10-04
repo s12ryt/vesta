@@ -180,3 +180,28 @@ Build run `37200449525`：**success**。
 - hvh_features.cpp 套用後 `nl=lf len=4297`；行 44/45/57/59/120/121/128 確認。
 - apply_silent_ui.ps1：page_silent=1、page_accuracy=1、page_enable_silent=1、loc_SILENT=2、loc_PSilent=2、zh_anchor=1、tw_anchor=1。
 - 尚未本地編譯；待 Build workflow。
+
+## 2026-10-04 — T-007 可選「極限穿牆」自動穿牆增強
+
+### 讀取 (Read)
+- src/simulation/penetration_solver.hpp、src/simulation/penetration.cpp、src/simulation/ballistics.hpp
+- src/features/aimbot/aimbot.cpp（穿牆使用點）
+- tests/penetration_accuracy.cpp、tests/penetration_segments.cpp
+- src/config/combat.hpp、src/config/settings.cpp
+- src/render/menu/aimbot_page.cpp、src/render/menu/localization.cpp
+
+### 寫入 (Write / Edit)
+- src/simulation/penetration_solver.hpp（重寫為 gated extreme 版本）
+- src/simulation/penetration.cpp（run_seed 傳入 config::combat_settings.global.extreme_wall）
+- src/config/combat.hpp（global_settings 新增 bool extreme_wall{ false };）
+- src/config/settings.cpp（to_json 43 行、from_json 109 行新增 extreme_wall）
+- src/render/menu/aimbot_page.cpp（PENETRATION 卡片 3→4、新增 Extreme Wall 開關）
+- src/render/menu/localization.cpp（ru/zh/tw 三筆 Extreme Wall）
+- 編輯腳本：C:\Users\yoyo2\AppData\Local\Temp\opencode\extreme_wall.ps1、extreme_wall_wire.ps1、apply_extreme_ui.ps1
+
+### 刪除 (Delete)
+- 無（penetration_solver.hpp 以 Remove-Item + 重寫方式更新）
+
+### 驗證 (Verify)
+- Select-String：aimbot Extreme Wall=1、localization Extreme Wall=3、penetration.cpp 已接設定、combat.hpp/settings.cpp 已含 extreme_wall
+- 尚未本地編譯（無 cmake/cl/clangd）；待 GitHub Actions Build（ctest 55/55，extreme 預設 false）

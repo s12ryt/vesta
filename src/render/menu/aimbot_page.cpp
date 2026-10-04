@@ -31,12 +31,13 @@ void menu_t::draw_aimbot()
         });
         card_in_column("recoil", "RECOIL CONTROL", 1, 1, [&] { rcs_row(global.aimbot_rcs); });
         if (global.aimbot_enabled)
-            card_in_column("penetration", "PENETRATION", 3, 1, [&] {
+            card_in_column("penetration", "PENETRATION", 4, 1, [&] {
                 visibility_row(global.aimbot_checks);
                 slider_row("Min Damage", global.aimbot_min_damage, 1.0f, 100.0f, "", 1.0f);
                 damage_override_row(global.aimbot_min_damage_override_enabled,
                                     global.aimbot_min_damage_override, global.aimbot_min_damage_override_mode,
                                     global.aimbot_min_damage_override_key);
+                toggle_row("Extreme Wall", global.extreme_wall);
             });
     }
     else

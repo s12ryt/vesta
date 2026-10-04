@@ -42,6 +42,7 @@ static void to_json(json& j, const combat_profile::global_settings& g)
 		{"aimbot_smoothing", g.aimbot_smoothing},
 		{"aimbot_humanize", g.aimbot_humanize},
 		{"aimbot_autowall", g.aimbot_autowall},
+		{"extreme_wall", g.extreme_wall},
 		{"aimbot_min_damage", g.aimbot_min_damage},
 		{"aimbot_min_damage_override_enabled", g.aimbot_min_damage_override_enabled},
 		{"aimbot_min_damage_override", g.aimbot_min_damage_override},
@@ -107,6 +108,7 @@ static void from_json(const json& j, combat_profile::global_settings& g)
 	if (j.contains("aimbot_smoothing")) j.at("aimbot_smoothing").get_to(g.aimbot_smoothing);
 	if (j.contains("aimbot_humanize")) j.at("aimbot_humanize").get_to(g.aimbot_humanize);
 	if (j.contains("aimbot_autowall")) j.at("aimbot_autowall").get_to(g.aimbot_autowall);
+	if (j.contains("extreme_wall")) j.at("extreme_wall").get_to(g.extreme_wall);
 	if (j.contains("aimbot_min_damage")) j.at("aimbot_min_damage").get_to(g.aimbot_min_damage);
 	if (j.contains("aimbot_min_damage_override_enabled")) j.at("aimbot_min_damage_override_enabled").get_to(g.aimbot_min_damage_override_enabled);
 	if (j.contains("aimbot_min_damage_override")) j.at("aimbot_min_damage_override").get_to(g.aimbot_min_damage_override);
