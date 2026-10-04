@@ -21,12 +21,18 @@ namespace vesta::hvh::features
 		create_move_fn g_original{ nullptr };
 
 		// The aim angles live somewhere inside the CUserCmd. Their offset is not
-		// documented for this build, so they are located once by searching for
-		// the live input angles and the path is cached for later ticks.
+		// documented for this build, so they are located a few times by searching
+		// for the live input angles and the path is then cached. The search is
+		// throttled hard: probing every candidate every call made the game lag,
+		// so it only runs a handful of times and then gives up.
 		enum class angle_path : int { none = 0, inside_command = 1, through_pointer = 2 };
 		angle_path g_angle_path{ angle_path::none };
 		std::uintptr_t g_angle_pointer_offset{ 0 };
 		std::uintptr_t g_angle_offset{ 0 };
+		std::uint32_t g_detour_calls{ 0 };
+		std::uint32_t g_locate_attempts{ 0 };
+		bool g_locate_gave_up{ false };
+		bool g_first_call_logged{ false };
 
 		[[nodiscard]] float wrap_angle( const float degrees )
 		{
@@ -38,15 +44,13 @@ namespace vesta::hvh::features
 			return value - 180.0f;
 		}
 
+		// No system call here: the caller validates the whole range once so the
+		// inner loop stays a plain memory comparison.
 		[[nodiscard]] bool angle_pair_matches( const void* base, const std::uintptr_t offset,
 			const float pitch, const float yaw )
 		{
-			const auto* address = reinterpret_cast<const std::uint8_t*>( base ) + offset;
-			if ( !readable( address, sizeof( float ) * 2u ) )
-			{
-				return false;
-			}
-			const auto* values = reinterpret_cast<const float*>( address );
+			const auto* values = reinterpret_cast<const float*>(
+				reinterpret_cast<const std::uint8_t*>( base ) + offset );
 			return std::fabs( values[ 0 ] - pitch ) < 1.0f
 				&& std::fabs( wrap_angle( values[ 1 ] - yaw ) ) < 1.0f;
 		}
@@ -68,14 +72,20 @@ namespace vesta::hvh::features
 			const float pitch = current[ 0 ];
 			const float yaw = current[ 1 ];
 
-			for ( std::uintptr_t offset = 0; offset < 0x600u; offset += 4u )
+			constexpr std::uintptr_t k_command_scan{ 0x600 };
+			if ( readable( command, k_command_scan ) )
 			{
-				if ( angle_pair_matches( command, offset, pitch, yaw ) )
+				for ( std::uintptr_t offset = 0; offset < k_command_scan; offset += 4u )
 				{
-					g_angle_path = angle_path::inside_command;
-					g_angle_pointer_offset = 0;
-					g_angle_offset = offset;
-					return;
+					if ( angle_pair_matches( command, offset, pitch, yaw ) )
+					{
+						g_angle_path = angle_path::inside_command;
+						g_angle_pointer_offset = 0;
+						g_angle_offset = offset;
+						log_line( "command angles located inside the command at 0x%llX",
+							static_cast< unsigned long long >( offset ) );
+						return;
+					}
 				}
 			}
 
@@ -87,7 +97,7 @@ namespace vesta::hvh::features
 					continue;
 				}
 				void* target = *reinterpret_cast<void* const*>( bytes + pointer_offset );
-				if ( !target || !readable( target, sizeof( float ) * 2u ) )
+				if ( !target || !readable( target, 0x400u ) )
 				{
 					continue;
 				}
@@ -98,18 +108,36 @@ namespace vesta::hvh::features
 						g_angle_path = angle_path::through_pointer;
 						g_angle_pointer_offset = pointer_offset;
 						g_angle_offset = offset;
+						log_line( "command angles located through pointer 0x%llX at 0x%llX",
+							static_cast< unsigned long long >( pointer_offset ),
+							static_cast< unsigned long long >( offset ) );
 						return;
 					}
 				}
 			}
 		}
 
-		// Returns the cached command aim angles, locating them on first use.
+		// Returns the cached command aim angles. The lookup is allowed a few
+		// attempts only, so a failed search cannot stall CreateMove every tick.
 		[[nodiscard]] float* command_angles( void* self, void* command )
 		{
 			if ( g_angle_path == angle_path::none )
 			{
+				if ( g_locate_gave_up || ( g_detour_calls % 128u ) != 1u )
+				{
+					return nullptr;
+				}
+				++g_locate_attempts;
 				locate_command_angles( self, command );
+				if ( g_angle_path == angle_path::none )
+				{
+					if ( g_locate_attempts >= 5u )
+					{
+						g_locate_gave_up = true;
+						log_line( "command angles were not found; aim writes stay disabled" );
+					}
+					return nullptr;
+				}
 			}
 			void* base = nullptr;
 			if ( g_angle_path == angle_path::inside_command )
@@ -136,6 +164,7 @@ namespace vesta::hvh::features
 			}
 			return reinterpret_cast<float*>( address );
 		}
+		}
 
 		bool __fastcall create_move_detour( void* self, void* first, void* second )
 		{
@@ -152,7 +181,14 @@ namespace vesta::hvh::features
 			{
 				return result;
 			}
+			++g_detour_calls;
 			++g_shared->state.hook_calls;
+			if ( !g_first_call_logged )
+			{
+				g_first_call_logged = true;
+				log_line( "create_move detour entered (self=%p command=%p)",
+					static_cast< const void* >( self ), static_cast< const void* >( second ) );
+			}
 
 			const auto& config = g_shared->config;
 			const auto& aim = g_shared->aim;
