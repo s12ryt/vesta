@@ -2,6 +2,7 @@
 #include <core/math/ray_capsule.hpp>
 #include <features/aimbot/aimbot.hpp>
 #include <features/aimbot/aim_control.hpp>
+#include <features/hvh/hvh.hpp>
 #include <features/misc/auto_stop.hpp>
 #include <features/visuals/event_log.hpp>
 #include <core/input/bindings.hpp>
@@ -2165,6 +2166,9 @@ namespace features::aimbot {
 
 	void aimbot_t::tick( )
 	{
+		// Reset the published silent-aim angle each frame; only an active aim
+		// republishes it, so a stale target never keeps steering the command.
+		features::hvh::controller( ).aim.valid = 0;
 		this->refresh_runtime_config( );
 		const auto& ctx = ballistics().ctx( );
 		if ( ctx.valid )
@@ -3317,6 +3321,15 @@ namespace features::aimbot {
 			};
 
 		auto desired = target_angle( aim_point );
+		// Publish the desired command angle so the injected HvH module can apply it
+		// silently; the local camera is never moved by this path.
+		if ( std::isfinite( desired.x ) && std::isfinite( desired.y ) )
+		{
+			auto& hvh = features::hvh::controller( );
+			hvh.aim.pitch = desired.x;
+			hvh.aim.yaw = foundation::wrap_yaw( desired.y );
+			hvh.aim.valid = 1;
+		}
 		auto delta_x = desired.x - control_angles.x;
 		auto delta_y = foundation::wrap_yaw( desired.y - control_angles.y );
 		auto dist = std::sqrt( delta_x * delta_x + delta_y * delta_y );
