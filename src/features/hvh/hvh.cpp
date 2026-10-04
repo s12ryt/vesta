@@ -35,9 +35,9 @@ namespace features::hvh {
 			return true;
 		}
 
-		const auto bytes = static_cast<DWORD>( sizeof( hvh_shared::shared_state ) );
+		const auto bytes = static_cast<DWORD>( sizeof( vesta::hvh_shared::shared_state ) );
 		m_mapping = ::CreateFileMappingW( INVALID_HANDLE_VALUE, nullptr,
-			PAGE_READWRITE, 0, bytes, hvh_shared::k_mapping_name );
+			PAGE_READWRITE, 0, bytes, vesta::hvh_shared::k_mapping_name );
 		if ( !m_mapping )
 		{
 			m_last_error = "CreateFileMapping failed for the HvH shared block.";
@@ -54,10 +54,10 @@ namespace features::hvh {
 			return false;
 		}
 
-		m_view = static_cast<hvh_shared::shared_state*>( view );
-		if ( fresh || !hvh_shared::valid( *m_view ) )
+		m_view = static_cast<vesta::hvh_shared::shared_state*>( view );
+		if ( fresh || !vesta::hvh_shared::valid( *m_view ) )
 		{
-			*m_view = hvh_shared::shared_state{};
+			*m_view = vesta::hvh_shared::shared_state{};
 		}
 		m_view->config = settings;
 		m_view->state.unload_request = 0;
@@ -106,7 +106,7 @@ namespace features::hvh {
 
 	inject_status controller_t::status( ) const
 	{
-		if ( m_view && hvh_shared::valid( *m_view ) && m_view->state.dll_loaded )
+		if ( m_view && vesta::hvh_shared::valid( *m_view ) && m_view->state.dll_loaded )
 		{
 			return inject_status::injected;
 		}
@@ -117,7 +117,7 @@ namespace features::hvh {
 
 	bool controller_t::dll_active( ) const
 	{
-		if ( !m_view || !hvh_shared::valid( *m_view ) || !m_view->state.dll_loaded )
+		if ( !m_view || !vesta::hvh_shared::valid( *m_view ) || !m_view->state.dll_loaded )
 		{
 			return false;
 		}
@@ -127,17 +127,17 @@ namespace features::hvh {
 
 	bool controller_t::signature_found( ) const
 	{
-		return m_view && hvh_shared::valid( *m_view ) && m_view->state.signature_found != 0;
+		return m_view && vesta::hvh_shared::valid( *m_view ) && m_view->state.signature_found != 0;
 	}
 
 	bool controller_t::hook_ready( ) const
 	{
-		return m_view && hvh_shared::valid( *m_view ) && m_view->state.hook_ready != 0;
+		return m_view && vesta::hvh_shared::valid( *m_view ) && m_view->state.hook_ready != 0;
 	}
 
 	int controller_t::targets_found( ) const
 	{
-		return m_view && hvh_shared::valid( *m_view ) ? m_view->state.targets_found : 0;
+		return m_view && vesta::hvh_shared::valid( *m_view ) ? m_view->state.targets_found : 0;
 	}
 
 	std::string_view controller_t::last_error( ) const

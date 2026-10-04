@@ -325,7 +325,7 @@ namespace vesta::hvh
 		{
 			return;
 		}
-		patch( m_target, m_original, m_length );
+		( void )patch( m_target, m_original, m_length );
 		if ( m_trampoline )
 		{
 			::VirtualFree( m_trampoline, 0, MEM_RELEASE );

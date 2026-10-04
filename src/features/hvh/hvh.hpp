@@ -35,7 +35,7 @@ namespace features::hvh {
 		void load( );
 		void save( );
 
-		hvh_shared::settings settings{};
+		vesta::hvh_shared::settings settings{};
 
 	private:
 		bool ensure_mapping( );
@@ -43,7 +43,7 @@ namespace features::hvh {
 		void refresh_paths( );
 
 		void* m_mapping{ nullptr };
-		hvh_shared::shared_state* m_view{ nullptr };
+		vesta::hvh_shared::shared_state* m_view{ nullptr };
 		std::filesystem::path m_directory{};
 		std::filesystem::path m_dll_path{};
 		std::string m_last_error{};
