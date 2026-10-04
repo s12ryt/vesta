@@ -263,3 +263,25 @@ Build run `37200449525`：**success**。
 - Select-String：include=1、publish=1、reset=1；`aimbot.cpp` 4181 行
 - GitHub Actions Build 37216036575 = success（`vesta.exe` + `vesta_hvh.dll` + ctest）
 - commit f3ce88b 推至 `myfork/main`（ac1bf93..f3ce88b）
+
+## 2026-10-04 — T-011 CI 產出並打包 vesta_hvh.dll
+
+### 讀取 (Read)
+- `.github/workflows/build.yml`（34 行；upload-artifact path 僅 `build/bin/vesta.exe` + 法律文件）
+- `.github/workflows/release.yml`（124 行；forum zip、checksum、attest、assets 清單均未含 DLL）
+
+### 寫入 (Write / Edit)
+- 新增暫存腳本 `C:\Users\yoyo2\AppData\Local\Temp\opencode\ci_hvh.ps1`（UTF8 no BOM、保留原換行、每個 anchor 斷言出現次數）：
+  - `build.yml` artifact 清單 +`vesta_hvh.dll`（1 處）
+  - `release.yml` archive 清單 +`vesta_hvh.dll`（1 處）
+  - `release.yml` checksum 與 `$assets` 清單 +`vesta_hvh.dll`（2 處）
+  - `release.yml` attest `subject-path` 改多行（1 處）
+- 執行輸出：`build.yml artifact replaced 1` / `release.yml archive replaced 1` / `release.yml arrays replaced 2` / `release.yml attest replaced 1`。
+- 交易：commit **d492848**「ci: ship vesta_hvh.dll in build artifacts and releases」，push `d1a0d44..d492848`（myfork/main）。
+
+### 刪除 (Delete)
+- 無。
+
+### 驗證 (Verify)
+- `Select-String` 確認：`build.yml:31` = `build/bin/vesta_hvh.dll`；`release.yml:39`（archive）、`:47`（checksum）、`:56-58`（attest subject-path 多行）、`:68`（assets）。
+- 待 Build run 完成後確認 artifact `vesta-windows-x64` 內含 `vesta_hvh.dll`。

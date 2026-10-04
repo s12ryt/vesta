@@ -25,6 +25,7 @@
 | T-008 | 反編譯取得本機 client.dll 的 CreateMove 簽名並內建至 DLL | 已完成（未經編譯驗證） | 見下方詳情 |
 | T-009 | 實作靜默瞄準／反瞄準命令寫入（本機實測 view angles = CCSGOInput+0x688） | 已完成（未經編譯驗證） | 見下方詳情 |
 | T-010 | 外部 aimbot 發佈目標視角至 HvH 靜默瞄準通道 | 已完成（CI 通過） | 見下方詳情 |
+| T-011 | CI 產出並打包 vesta_hvh.dll（build artifact 與 release） | 已完成（待 CI 驗證） | 見下方詳情 |
 
 ---
 
@@ -395,3 +396,31 @@ GitHub Actions Build run **37216036575**（push，head f3ce88b）= `success`；�
 ### 已知限制
 - 靜默瞄準端到端可運作的前提：外部 aimbot 有選到目標（`aim.valid = 1`）、DLL 的 `enable_silent` 開啟、CreateMove 掛鉤已安裝（本機簽名 T-008 已內建）。
 - 角度寫入位置為 `CCSGOInput + 0x688`（實測確認），採「存→改→呼叫原函式→還原」方式，避免影響本地視角。
+
+## T-011 CI 產出並打包 vesta_hvh.dll
+
+### 來源需求
+m0492「那github的CI可以自動產出hvh.dll嗎」
+
+### 結論與現況
+- CI **本來就會建置** vesta_hvh.dll：`cmake --build --preset release` 會建置所有 target，CI log 可見 `vesta_hvh.vcxproj -> ...\build\bin\vesta_hvh.dll`。
+- 但原本**沒有打包**：
+  - Build workflow 的 `upload-artifact` 只列 `build/bin/vesta.exe` + `LICENSE` / `NOTICE` / `THIRD_PARTY_NOTICES.md`。
+  - Release workflow 的論壇壓縮檔、`SHA256SUMS.txt`、`actions/attest` 目標、以及 release 資產清單也都只有 `vesta.exe` / `vesta.pdb`。
+  - 所以下載到的成品不含 DLL。
+
+### 變更
+- `.github/workflows/build.yml`
+  - `Upload executable` 的 `path:` 增加 `build/bin/vesta_hvh.dll`（line 31）。
+- `.github/workflows/release.yml`
+  - `Package forum archive`（`Compress-Archive`）加入 `build/bin/vesta_hvh.dll`，與 exe/pdb 打成同一個 `Vesta-<tag>-forum.zip`（line 39）。
+  - `Create checksum` 清單與 release `$assets` 清單加入 `build/bin/vesta_hvh.dll`（同一個 3 行結構，共 2 處；line 47、line 68）。
+  - `Attest GitHub Actions build` 的 `subject-path` 改為多行，同時對 `vesta.exe` 與 `vesta_hvh.dll` 產生出處證明（line 56-58）。
+
+### 驗證
+- commit **d492848**「ci: ship vesta_hvh.dll in build artifacts and releases」（2 檔，+7/-2），已推 `myfork/main`。
+- 觸發 Build run；預期 artifact `vesta-windows-x64` 內含 `vesta.exe` 與 `vesta_hvh.dll`。
+
+### 注意
+- DLL 必須與 exe 同目錄：外部注入器以 `GetModuleFileNameW` 取得自身目錄後尋找 `vesta_hvh.dll`。artifact 解壓後兩者同層，符合。
+- `if-no-files-found: error` 仍保留；DLL 一定會被建置，不會缺檔。
