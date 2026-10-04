@@ -140,6 +140,11 @@ namespace features::hvh {
 		return m_view && vesta::hvh_shared::valid( *m_view ) && m_view->state.hook_ready != 0;
 	}
 
+	int controller_t::hook_calls( ) const
+	{
+		return m_view && vesta::hvh_shared::valid( *m_view ) ? m_view->state.hook_calls : 0;
+	}
+
 	int controller_t::targets_found( ) const
 	{
 		return m_view && vesta::hvh_shared::valid( *m_view ) ? m_view->state.targets_found : 0;

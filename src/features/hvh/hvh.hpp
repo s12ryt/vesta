@@ -28,6 +28,7 @@ namespace features::hvh {
 		[[nodiscard]] bool dll_active( ) const;
 		[[nodiscard]] bool signature_found( ) const;
 		[[nodiscard]] bool hook_ready( ) const;
+		[[nodiscard]] int hook_calls( ) const;
 		[[nodiscard]] int targets_found( ) const;
 		[[nodiscard]] std::string_view last_error( ) const;
 		[[nodiscard]] const std::filesystem::path& dll_path( ) const;

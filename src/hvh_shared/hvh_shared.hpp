@@ -7,7 +7,7 @@
 namespace vesta::hvh_shared
 {
 	inline constexpr std::uint32_t k_magic = 0x56485648u; // 'HVHV'
-	inline constexpr std::uint32_t k_version = 3u;
+	inline constexpr std::uint32_t k_version = 4u;
 	inline constexpr std::size_t k_signature_length = 160;
 
 	// Local\ per-session mapping. Both sides open it by name; the game runs in
@@ -135,6 +135,7 @@ namespace vesta::hvh_shared
 		std::int32_t unload_request{ 0 };
 		std::int32_t dll_loaded{ 0 };
 		std::int32_t hook_ready{ 0 };
+		std::int32_t hook_calls{ 0 };
 		std::int32_t signature_found{ 0 };
 		std::int32_t local_player_valid{ 0 };
 		std::int32_t targets_found{ 0 };

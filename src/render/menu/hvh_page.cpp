@@ -97,7 +97,7 @@ void menu_t::draw_hvh()
         });
     }
 
-    card_in_column("hvh_status", "HVH STATUS", 4, 0, [&] {
+    card_in_column("hvh_status", "HVH STATUS", 5, 0, [&] {
         status_row(render::localization::tr("State"), state_text, state_color);
         status_row(render::localization::tr("Hook"),
                    hvh.hook_ready() ? render::localization::tr("Ready")
@@ -107,6 +107,8 @@ void menu_t::draw_hvh()
                    hvh.signature_found() ? render::localization::tr("Found")
                                          : render::localization::tr("Missing"),
                    hvh.signature_found() ? k_text_main : k_text_muted);
+        const auto calls = std::to_string(hvh.hook_calls());
+        status_row(render::localization::tr("Hook Calls"), calls.c_str(), k_text_muted);
         const auto error = hvh.last_error();
         status_row(render::localization::tr("Last Error"),
                    error.empty() ? render::localization::tr("None") : error.data(), k_text_muted);
