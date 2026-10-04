@@ -26,6 +26,7 @@
 | T-009 | 實作靜默瞄準／反瞄準命令寫入（本機實測 view angles = CCSGOInput+0x688） | 已完成（未經編譯驗證） | 見下方詳情 |
 | T-010 | 外部 aimbot 發佈目標視角至 HvH 靜默瞄準通道 | 已完成（CI 通過） | 見下方詳情 |
 | T-011 | CI 產出並打包 vesta_hvh.dll（build artifact 與 release） | 已完成（待 CI 驗證） | 見下方詳情 |
+| T-012 | 修正注入即崩潰：改用 vtable slot 交換取代 5-byte inline hook | 已完成（未經編譯驗證） | 見下方詳情 |
 
 ---
 
@@ -424,3 +425,37 @@ m0492「那github的CI可以自動產出hvh.dll嗎」
 ### 注意
 - DLL 必須與 exe 同目錄：外部注入器以 `GetModuleFileNameW` 取得自身目錄後尋找 `vesta_hvh.dll`。artifact 解壓後兩者同層，符合。
 - `if-no-files-found: error` 仍保留；DLL 一定會被建置，不會缺檔。
+
+
+## T-012 修正注入即崩潰：改用 vtable slot 交換
+
+### 來源需求
+Operator：「在遊戲內注入就崩潰」。
+
+### 根本原因
+`src/hvh/dllmain.cpp` 的 `inline_hook::install()` 固定複製 `patch_size = 5` 個位元組到 trampoline。但本建置的 CreateMove（client.dll RVA 0xD01B20）開頭為 `48 8B C4 | 4C 89 40 18`（`mov rax,rsp` 佔 3 bytes，接著 `mov [rax+18],r8` 佔 4 bytes、跨越位移 3..6），因此 5 bytes 的複製會把第二條指令切成兩半，trampoline 之後執行到垃圾位元組（`4C 89 FF` / `25 ..`）→ 第一次 CreateMove 呼叫時立即崩潰。
+日誌 `%TEMP%\vesta_hvh.log` 顯示 `create_move hook installed` 共兩次，且其後沒有任何正常卸載訊息，與「安裝後立即崩潰」吻合。
+
+### 修正
+以 vtable slot 交換（VMT hook）取代 inline .text hook：
+
+- `src/hvh/hvh_internal.hpp`：新增 `find_pointer_entry( base, size, target )` 與 `class vtable_hook { install( void** slot, void* detour ); remove(); installed(); original(); }`，移除 `class inline_hook`。
+- `src/hvh/dllmain.cpp`：實作 `find_pointer_entry`（在模組範圍內以 8 bytes 步進找出值等於 target 的指標；優先採用前後鄰居都落在模組內的 vtable 形狀，否則退回第一個命中）與 `vtable_hook::install`（把 slot 目前值存為 `m_original`，再 `patch( slot, &replacement, 8 )`）、`vtable_hook::remove`（把 `m_original` 寫回 slot）。
+- `src/hvh/hvh_features.cpp`：`inline_hook g_hook{};` → `vtable_hook g_hook{};`；`initialize()` 以 `scan_pattern` 找到 CreateMove 後，改用 `find_pointer_entry( client, client_size, target )` 取得 vtable slot，再 `g_hook.install( slot, reinterpret_cast<void*>( &create_move_detour ) )`，並 `g_original = reinterpret_cast<create_move_fn>( g_hook.original( ) )`。
+- 完全不修改 .text、不需要 trampoline、不需要指令長度解碼，因此不會再發生「切斷指令」的風險。
+
+### 變更檔案
+- src/hvh/hvh_internal.hpp
+- src/hvh/dllmain.cpp
+- src/hvh/hvh_features.cpp
+
+### 設計重點
+- CreateMove 的 `this`（rcx）即 CCSGOInput 物件，故 `self + 0x688`（pitch@0x688、yaw@0x68C、roll@0x690）是正確的視角位移；T-009 的寫入位移無誤，問題只出在 hook 機制。
+- 本建置的 CreateMove vtable slot 位址 = `clientBase + 0x1C9AD58 + 25 * 8` = `clientBase + 0x1C9AE20`。
+- `patch()` 會先 `VirtualProtect` 成 RWX 再還原保護，因此可以寫入唯讀 `.rdata` 的 vtable slot。
+
+### 驗證狀態
+本機沒有編譯器（`cmake` / `cl` / `clangd` 皆不在 PATH），僅以 PowerShell 做靜態驗證：三個檔案的 `inline_hook` 出現次數皆為 0，`vtable_hook` / `find_pointer_entry` 已就位（dllmain.cpp 378 行、hvh_features.cpp 206 行、hvh_internal.hpp 82 行）；待 GitHub Actions Build 驗證。
+
+### 已知限制
+本次修正只解決「崩潰」並讓 hook 能安全安裝。silent aim 仍需在 UI 開啟，且外部 aimbot 需提供目標角（T-010 已接通），建議在練習模式驗證。

@@ -285,3 +285,26 @@ Build run `37200449525`：**success**。
 ### 驗證 (Verify)
 - `Select-String` 確認：`build.yml:31` = `build/bin/vesta_hvh.dll`；`release.yml:39`（archive）、`:47`（checksum）、`:56-58`（attest subject-path 多行）、`:68`（assets）。
 - 待 Build run 完成後確認 artifact `vesta-windows-x64` 內含 `vesta_hvh.dll`。
+
+
+## 2026-10-05 — T-012 修正注入即崩潰：vtable hook
+
+### 讀取 (Read)
+- `%TEMP%\vesta_hvh.log`（顯示 hook 安裝兩次後無卸載訊息）
+- `src/hvh/hvh_internal.hpp`、`src/hvh/dllmain.cpp`、`src/hvh/hvh_features.cpp`
+
+### 寫入 (Write / Edit)
+- 取代區塊備份：`C:\Users\yoyo2\AppData\Local\Temp\opencode\blk_internal.txt`、`blk_dllmain.txt`、`blk_features.txt`
+- 修正腳本：`fix_vmt.ps1`（首次，guard 條件寫錯）、`fix_vmt2.ps1`（成功）
+- `src/hvh/hvh_internal.hpp`：`inline_hook` → `vtable_hook` + `find_pointer_entry` 宣告
+- `src/hvh/dllmain.cpp`：實作 `find_pointer_entry` 與 `vtable_hook::install` / `remove`
+- `src/hvh/hvh_features.cpp`：`g_hook` 型別改為 `vtable_hook`；`initialize()` 改以 vtable slot 安裝 hook
+- `agent/deep_todos.md`、`agent/memory.md`：本紀錄
+
+### 刪除 (Delete)
+- 移除 `src/hvh/dllmain.cpp` 的 `inline_hook::install` / `remove` 實作，及 `hvh_internal.hpp` 的 `class inline_hook`（以區塊取代方式）
+
+### 驗證 (Verify)
+- `fix_vmt2.ps1` 輸出：`spliced dllmain.cpp 274..335 -> 70 lines; now 378 lines`、`spliced hvh_features.cpp 157..172 -> 29 lines; now 206 lines`、`g_hook decl replaced: 1`
+- 逐檔計數：hvh_internal.hpp `vtable_hook=2 inline_hook=0 find_pointer_entry=1`；dllmain.cpp `vtable_hook=2 inline_hook=0 find_pointer_entry=1`；hvh_features.cpp `vtable_hook=1 inline_hook=0 find_pointer_entry=1`
+- 尚未編譯；待 CI Build 驗證

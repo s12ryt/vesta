@@ -271,68 +271,76 @@ namespace vesta::hvh
 		return true;
 	}
 
-	bool inline_hook::install( void* target, void* detour )
+	void** find_pointer_entry( std::uint8_t* base, std::size_t size, const void* target )
 	{
-		if ( installed( ) || !target || !detour )
+		if ( !base || size < sizeof( void* ) || !target )
+		{
+			return nullptr;
+		}
+		const auto begin = reinterpret_cast<std::uintptr_t>( base );
+		const auto end = begin + size;
+		const std::size_t count = size / sizeof( void* );
+		auto** entries = reinterpret_cast<void**>( base );
+
+		void** fallback{ nullptr };
+		for ( std::size_t i = 0; i < count; ++i )
+		{
+			if ( entries[ i ] != target )
+			{
+				continue;
+			}
+			if ( !fallback )
+			{
+				fallback = entries + i;
+			}
+			// Prefer a hit inside a run of pointers that all point back into this
+			// module: that is the shape of a virtual table.
+			const auto previous = i > 0
+				? reinterpret_cast<std::uintptr_t>( entries[ i - 1 ] ) : 0;
+			const auto next = i + 1 < count
+				? reinterpret_cast<std::uintptr_t>( entries[ i + 1 ] ) : 0;
+			if ( previous >= begin && previous < end && next >= begin && next < end )
+			{
+				return entries + i;
+			}
+		}
+		return fallback;
+	}
+
+	bool vtable_hook::install( void** slot, void* detour )
+	{
+		if ( installed( ) || !slot || !detour )
 		{
 			return false;
 		}
-		// A rel32 JMP needs five bytes. Only the minimal prologue is preserved;
-		// callers that patch functions whose first instruction is shorter than
-		// five bytes must provide a wider stub. Signatures are gated upstream,
-		// so an unverified target is never patched.
-		constexpr std::size_t patch_size = 5;
-
-		m_trampoline = ::VirtualAlloc( nullptr, 64, MEM_COMMIT | MEM_RESERVE,
-			PAGE_EXECUTE_READWRITE );
-		if ( !m_trampoline )
+		void* original{};
+		std::memcpy( &original, slot, sizeof( original ) );
+		if ( !original )
 		{
 			return false;
 		}
-
-		std::memcpy( m_original, target, patch_size );
-		m_length = patch_size;
-
-		std::uint8_t* tramp = static_cast<std::uint8_t*>( m_trampoline );
-		std::memcpy( tramp, m_original, patch_size );
-		// JMP [rip+0] ; <absolute 64-bit destination>
-		tramp[ patch_size + 0 ] = 0xFF;
-		tramp[ patch_size + 1 ] = 0x25;
-		*reinterpret_cast<std::int32_t*>( tramp + patch_size + 2 ) = 0;
-		*reinterpret_cast<void**>( tramp + patch_size + 6 ) =
-			static_cast<std::uint8_t*>( target ) + patch_size;
-
-		std::uint8_t jmp[ patch_size ]{ 0xE9 };
-		const auto relative = reinterpret_cast<std::int64_t>( detour )
-			- ( reinterpret_cast<std::int64_t>( target ) + patch_size );
-		*reinterpret_cast<std::int32_t*>( jmp + 1 ) =
-			static_cast<std::int32_t>( relative );
-
-		if ( !patch( target, jmp, patch_size ) )
+		void* replacement = detour;
+		if ( !patch( slot, reinterpret_cast<const std::uint8_t*>( &replacement ), sizeof( replacement ) ) )
 		{
-			::VirtualFree( m_trampoline, 0, MEM_RELEASE );
-			m_trampoline = nullptr;
 			return false;
 		}
-
-		m_target = target;
+		m_slot = slot;
+		m_original = original;
 		return true;
 	}
 
-	void inline_hook::remove( )
+	void vtable_hook::remove( )
 	{
-		if ( !m_target )
+		if ( !m_slot )
 		{
 			return;
 		}
-		( void )patch( m_target, m_original, m_length );
-		if ( m_trampoline )
-		{
-			::VirtualFree( m_trampoline, 0, MEM_RELEASE );
-			m_trampoline = nullptr;
-		}
-		m_target = nullptr;
+		void* original = m_original;
+		( void )patch( m_slot, reinterpret_cast<const std::uint8_t*>( &original ), sizeof( original ) );
+		m_slot = nullptr;
+		m_original = nullptr;
 	}
+
 
 	const game_offsets& offsets( )
 	{

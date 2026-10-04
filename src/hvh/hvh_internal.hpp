@@ -39,26 +39,32 @@ namespace vesta::hvh
 		return true;
 	}
 
-	// ---- inline x64 hook -----------------------------------------------------
-	// Overwrites the first prologue bytes of a target with a rel32 JMP to the
-	// detour and keeps a executable copy of the overwritten bytes followed by a
-	// JMP back (the trampoline) so the original can still be called.
-	class inline_hook
+	// ---- vtable pointer lookup -----------------------------------------------
+	// Finds the address of the first pointer-sized entry inside [base, base+size)
+	// whose value equals target. Used to locate the virtual-table slot that holds
+	// a scanned function (for example CreateMove) so it can be swapped without
+	// patching executable bytes.
+	[[nodiscard]] void** find_pointer_entry( std::uint8_t* base, std::size_t size, const void* target );
+
+	// ---- vtable hook ---------------------------------------------------------
+	// Swaps a single function pointer inside a virtual table. There is no
+	// trampoline and no instruction-length guesswork, so it is safe for targets
+	// whose first instruction is shorter than the five bytes a rel32 JMP needs.
+	class vtable_hook
 	{
 	public:
-		~inline_hook( ) { remove( ); }
+		~vtable_hook( ) { remove( ); }
 
-		bool install( void* target, void* detour );
+		bool install( void** slot, void* detour );
 		void remove( );
-		[[nodiscard]] bool installed( ) const { return m_target != nullptr; }
-		[[nodiscard]] void* trampoline( ) const { return m_trampoline; }
+		[[nodiscard]] bool installed( ) const { return m_slot != nullptr; }
+		[[nodiscard]] void* original( ) const { return m_original; }
 
 	private:
-		void* m_target{ nullptr };
-		void* m_trampoline{ nullptr };
-		std::uint8_t m_original[ 16 ]{};
-		std::size_t m_length{ 0 };
+		void** m_slot{ nullptr };
+		void* m_original{ nullptr };
 	};
+
 
 	// ---- resolved game surface ----------------------------------------------
 	// Entry-point signatures live here so a CS2 update only requires editing

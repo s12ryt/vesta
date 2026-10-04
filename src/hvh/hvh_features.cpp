@@ -8,7 +8,7 @@ namespace vesta::hvh::features
 	namespace
 	{
 		vesta::hvh_shared::shared_state* g_shared{ nullptr };
-		inline_hook g_hook{};
+		vtable_hook g_hook{};
 		float g_spin{ 0.0f };
 
 		// The live view angles were proven at CCSGOInput + 0x688 (pitch, yaw,
@@ -163,13 +163,26 @@ namespace vesta::hvh::features
 		}
 		g_shared->state.signature_found = 1;
 
-		if ( !g_hook.install( target, reinterpret_cast<void*>( &create_move_detour ) ) )
+		// Resolve the virtual-table slot that holds the scanned function and swap
+		// it. Patching the slot instead of the code avoids splitting an
+		// instruction inside the prologue (a five-byte JMP corrupted CreateMove
+		// and crashed the game) and leaves client.dll .text untouched.
+		auto** slot = find_pointer_entry( client, client_size, target );
+		if ( !slot )
 		{
 			g_shared->state.last_error = -4;
-			log_line( "failed to install the create_move hook" );
+			log_line( "create_move vtable slot was not found" );
 			return false;
 		}
-		g_original = reinterpret_cast<create_move_fn>( g_hook.trampoline( ) );
+
+		if ( !g_hook.install( slot, reinterpret_cast<void*>( &create_move_detour ) ) )
+		{
+			g_shared->state.last_error = -5;
+			log_line( "failed to install the create_move vtable hook" );
+			return false;
+		}
+		g_original = reinterpret_cast<create_move_fn>( g_hook.original( ) );
+
 		g_shared->state.hook_ready = 1;
 		g_shared->state.last_error = 0;
 		log_line( "create_move hook installed" );
