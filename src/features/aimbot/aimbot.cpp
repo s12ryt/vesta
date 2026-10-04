@@ -2366,7 +2366,30 @@ namespace features::aimbot {
 		}
 
 		const auto valid_weapon = game::rules::is_firearm( ctx.weapon_type );
-		const auto cfg = this->runtime_config()->combat.get( ctx.weapon_type );
+		auto cfg = this->runtime_config()->combat.get( ctx.weapon_type );
+
+		// HvH "rage lock": when the HvH panel asks for rage, drive the external
+		// aimbot even if its own switch is off and apply the rage parameters.
+		const auto& hvh_settings = features::hvh::controller( ).settings;
+		if ( hvh_settings.enable_rage != 0 )
+		{
+			cfg.aimbot.enabled = true;
+			cfg.aimbot.activation_mode = config::combat_profile::activation::always;
+			cfg.aimbot.fov_config.selection = config::combat_profile::fov_settings::fixed;
+			if ( hvh_settings.rage_fov > 0 )
+			{
+				cfg.aimbot.fov = hvh_settings.rage_fov;
+			}
+			if ( hvh_settings.rage_min_damage > 0 )
+			{
+				cfg.aimbot.min_damage = static_cast< float >( hvh_settings.rage_min_damage );
+			}
+			cfg.aimbot.lethal_only = false;
+			cfg.aimbot.hitbox_parts = config::combat_profile::aim_part::all;
+			cfg.aimbot.checks.walls = hvh_settings.rage_autowall != 0
+				? config::combat_profile::wall_policy::penetration
+				: config::combat_profile::wall_policy::block;
+		}
 		const auto pawn = game::local_player().pawn( );
 		if ( pawn )
 		{
