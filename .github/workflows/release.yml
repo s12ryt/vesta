@@ -36,7 +36,7 @@ jobs:
       - name: Package forum archive
         shell: pwsh
         run: |
-          Compress-Archive -LiteralPath build/bin/vesta.exe, build/bin/vesta.pdb `
+          Compress-Archive -LiteralPath build/bin/vesta.exe, build/bin/vesta.pdb, build/bin/vesta_hvh.dll `
             -DestinationPath "Vesta-$env:RELEASE_TAG-forum.zip"
       - name: Create checksum
         shell: pwsh
@@ -44,6 +44,7 @@ jobs:
           @(
             "build/bin/vesta.exe"
             "build/bin/vesta.pdb"
+            "build/bin/vesta_hvh.dll"
             "Vesta-$env:RELEASE_TAG-forum.zip"
           ) | ForEach-Object {
             $hash = (Get-FileHash $_ -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -52,7 +53,9 @@ jobs:
       - name: Attest GitHub Actions build
         uses: actions/attest@v4
         with:
-          subject-path: build/bin/vesta.exe
+          subject-path: |
+            build/bin/vesta.exe
+            build/bin/vesta_hvh.dll
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -62,6 +65,7 @@ jobs:
           $assets = @(
             "build/bin/vesta.exe"
             "build/bin/vesta.pdb"
+            "build/bin/vesta_hvh.dll"
             "Vesta-$env:RELEASE_TAG-forum.zip"
             "SHA256SUMS.txt"
             "LICENSE"

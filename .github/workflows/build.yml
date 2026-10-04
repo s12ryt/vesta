@@ -28,6 +28,7 @@ jobs:
           name: vesta-windows-x64
           path: |
             build/bin/vesta.exe
+            build/bin/vesta_hvh.dll
             LICENSE
             NOTICE
             THIRD_PARTY_NOTICES.md
