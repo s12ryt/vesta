@@ -245,3 +245,21 @@ Build run `37200449525`：**success**。
 ### 驗證
 - Select-String：shared k_version=3u / aim_command x2 / aim_command aim{} x1；hvh.hpp aim x1；hvh.cpp m_view->aim x3；hvh_features.cpp 192 行、含 k_view_angles_offset 0x688。
 - 尚未本機編譯；待 GitHub Actions Build。
+
+## 2026-10-04 — T-010 外部 aimbot 發佈目標視角至 HvH 靜默瞄準通道
+
+### 讀取 (Read)
+- `src/features/aimbot/aimbot.cpp`（`tick()` 2166、`aimbot()` 3148、`target_angle` / `desired` 3312-3319）
+- `src/features/aimbot/aimbot.hpp`、`aim_control.hpp`、`src/core/math/vector.hpp`、`src/core/input/input.cpp`
+
+### 寫入 (Write / Edit)
+- `src/features/aimbot/aimbot.cpp`：新增 include、`tick()` 重置 `aim.valid`、`desired` 後發佈 pitch / yaw / valid
+- `agent/deep_todos.md`、`agent/memory.md`
+
+### 刪除 (Delete)
+- 無
+
+### 驗證 (Verify)
+- Select-String：include=1、publish=1、reset=1；`aimbot.cpp` 4181 行
+- GitHub Actions Build 37216036575 = success（`vesta.exe` + `vesta_hvh.dll` + ctest）
+- commit f3ce88b 推至 `myfork/main`（ac1bf93..f3ce88b）

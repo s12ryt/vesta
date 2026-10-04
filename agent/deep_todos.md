@@ -24,6 +24,7 @@
 | T-007 | 新增可選「極限穿牆」(Extreme Wall) 自動穿牆模式 | 已完成（未經編譯驗證） | 見下方詳情 |
 | T-008 | 反編譯取得本機 client.dll 的 CreateMove 簽名並內建至 DLL | 已完成（未經編譯驗證） | 見下方詳情 |
 | T-009 | 實作靜默瞄準／反瞄準命令寫入（本機實測 view angles = CCSGOInput+0x688） | 已完成（未經編譯驗證） | 見下方詳情 |
+| T-010 | 外部 aimbot 發佈目標視角至 HvH 靜默瞄準通道 | 已完成（CI 通過） | 見下方詳情 |
 
 ---
 
@@ -367,3 +368,30 @@
 ### 已知限制
 - 反瞄準（spin/pitch）可獨立運作；靜默瞄準需要外部端在 `aim` 內發布目標角度（valid/pitch/yaw），目前外部尚未計算並發布 → 啟用靜默瞄準暫不生效，待下一步把 Vesta 既有瞄準角度寫入 aim。
 - 回傳型別：CreateMove 可能回傳 double；detour 以 bool 回傳，但原始呼叫的 xmm0 未被覆寫，故兩種情形皆可保留原回傳值。
+
+## T-010 外部 aimbot 發佈目標視角至 HvH 靜默瞄準通道
+
+### 來源需求
+Operator：「接吧」（接續 T-009 的已知限制：靜默瞄準需要外部把目標角度寫進 `aim`）。
+
+### 目標
+讓 Vesta 的外部 aimbot 在算出目標角度後，將其寫入 `features::hvh::controller().aim`（pitch / yaw / valid）；透過既有的 hvh worker 每 16ms `publish()` 鏡射到共享記憶體，供注入的 `vesta_hvh.dll` 在 CreateMove 中讀取並套用（`enable_silent` 開啟時），達成真正的靜默瞄準。
+
+### 設計
+- `src/features/aimbot/aimbot.cpp`：
+  - 新增 `#include <features/hvh/hvh.hpp>`（置於 `aim_control.hpp` 之後）。
+  - `aimbot_t::tick()` 開頭每幀重置 `features::hvh::controller().aim.valid = 0;`，避免前一幀的目標殘留持續轉向。
+  - 於 `auto desired = target_angle( aim_point );` 之後，若 `desired.x` / `desired.y` 有限，寫入 `hvh.aim.pitch = desired.x; hvh.aim.yaw = foundation::wrap_yaw( desired.y ); hvh.aim.valid = 1;`。
+- 不需改動共享結構（T-009 已加入 `aim_command`），亦不需 CMake 變更（`aimbot.cpp` 已在 `vesta_sources`）。
+
+### 變更檔案
+| 檔案 | 變更 |
+|---|---|
+| src/features/aimbot/aimbot.cpp | include `features/hvh/hvh.hpp`；`tick()` 重置 `aim.valid`；算出 `desired` 後發佈 pitch / yaw / valid |
+
+### 驗證狀態
+GitHub Actions Build run **37216036575**（push，head f3ce88b）= `success`；建置 `vesta.exe` + `vesta_hvh.dll` 且 ctest 全數通過。本機無編譯器（cmake / cl / clangd 皆不在 PATH）。commit **f3ce88b** 已推至 `myfork/main`。
+
+### 已知限制
+- 靜默瞄準端到端可運作的前提：外部 aimbot 有選到目標（`aim.valid = 1`）、DLL 的 `enable_silent` 開啟、CreateMove 掛鉤已安裝（本機簽名 T-008 已內建）。
+- 角度寫入位置為 `CCSGOInput + 0x688`（實測確認），採「存→改→呼叫原函式→還原」方式，避免影響本地視角。
