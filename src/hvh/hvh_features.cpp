@@ -229,7 +229,6 @@ namespace vesta::hvh::features
 			}
 			return result;
 		}
-	}
 
 	float advance_spin( const float current, const float speed )
 	{
