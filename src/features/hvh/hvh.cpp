@@ -377,6 +377,7 @@ namespace features::hvh {
 		settings.silent_min_damage = get( "silent_min_damage", settings.silent_min_damage );
 		settings.enable_nospread = get( "enable_nospread", settings.enable_nospread );
 		settings.enable_norecoil = get( "enable_norecoil", settings.enable_norecoil );
+		settings.enable_thirdperson = get( "enable_thirdperson", settings.enable_thirdperson );
 
 		settings.enable_trigger = get( "enable_trigger", settings.enable_trigger );
 		settings.trigger_delay_ms = get( "trigger_delay_ms", settings.trigger_delay_ms );
@@ -430,6 +431,7 @@ namespace features::hvh {
 			{ "silent_min_damage", settings.silent_min_damage },
 			{ "enable_nospread", settings.enable_nospread },
 			{ "enable_norecoil", settings.enable_norecoil },
+			{ "enable_thirdperson", settings.enable_thirdperson },
 			{ "enable_trigger", settings.enable_trigger },
 			{ "trigger_delay_ms", settings.trigger_delay_ms },
 			{ "trigger_hitchance", settings.trigger_hitchance },

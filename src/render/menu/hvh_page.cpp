@@ -173,6 +173,10 @@ void menu_t::draw_hvh()
         toggle_int("No Spread", s.enable_nospread);
         toggle_int("No Recoil", s.enable_norecoil);
     });
+    card_in_column("hvh_camera", "CAMERA", 1, 0, [&] {
+        toggle_int("Third Person", s.enable_thirdperson);
+    });
+
 
     end_cards();
     ImGui::EndChild();

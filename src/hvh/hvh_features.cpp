@@ -16,6 +16,7 @@ namespace vesta::hvh::features
 		// is CCSGOInput::CreateMove, so its first argument is the CCSGOInput
 		// instance and its third argument is the CUserCmd the server will see.
 		constexpr std::uintptr_t k_view_angles_offset{ 0x688 };
+		constexpr std::uintptr_t k_third_person_offset{ 0x228 };
 
 		using create_move_fn = bool( * )( void*, void*, void* );
 		create_move_fn g_original{ nullptr };
@@ -194,6 +195,16 @@ namespace vesta::hvh::features
 			const auto& aim = g_shared->aim;
 			const bool silent = config.enable_silent != 0 && aim.valid != 0;
 			const bool antiaim = config.enable_antiaim != 0;
+			if ( config.enable_thirdperson != 0 )
+			{
+				auto* mode = reinterpret_cast< std::int32_t* >(
+					reinterpret_cast< std::uint8_t* >( self ) + k_third_person_offset );
+				if ( readable( mode, sizeof( std::int32_t ) ) )
+				{
+					*mode = 256;
+				}
+			}
+
 			if ( !silent && !antiaim )
 			{
 				return result;
