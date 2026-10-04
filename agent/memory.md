@@ -308,3 +308,37 @@ Build run `37200449525`：**success**。
 - `fix_vmt2.ps1` 輸出：`spliced dllmain.cpp 274..335 -> 70 lines; now 378 lines`、`spliced hvh_features.cpp 157..172 -> 29 lines; now 206 lines`、`g_hook decl replaced: 1`
 - 逐檔計數：hvh_internal.hpp `vtable_hook=2 inline_hook=0 find_pointer_entry=1`；dllmain.cpp `vtable_hook=2 inline_hook=0 find_pointer_entry=1`；hvh_features.cpp `vtable_hook=1 inline_hook=0 find_pointer_entry=1`
 - 尚未編譯；待 CI Build 驗證
+
+
+## 2026-10-05 — T-013 修正靜默瞄準／反瞄準（CreateMove 之後改寫指令視角）
+
+### 讀取 (Read)
+- src/hvh/hvh_features.cpp（舊 detour：先寫 `self + 0x688` 再呼叫原函式）
+- src/hvh_shared/hvh_shared.hpp（status 欄位、k_version）
+- src/features/hvh/hvh.hpp / hvh.cpp（hook_ready 存取器樣式）
+- src/render/menu/hvh_page.cpp（HVH STATUS 卡片 4 列）
+- src/render/menu/localization.cpp（ru 行 135 Auto Wall、zh 行 670 / tw 行 1323 注入字串）
+
+### 寫入 (Write / Edit)
+- 新增 `C:\Users\yoyo2\AppData\Local\Temp\opencode\blk_cmdfix.txt`（hvh_features.cpp 第 14..93 行的替換區塊）
+- 新增 `loc_ru_calls.txt` / `loc_zh_calls.txt` / `loc_tw_calls.txt`
+- 新增 `apply_cmd_fix2.ps1`（修正 List 轉型問題後成功執行）
+- src/hvh/hvh_features.cpp：第 14..93 行替換為新區塊（現 297 行）
+- src/hvh_shared/hvh_shared.hpp：k_version 3→4；新增 `hook_calls` 欄位（行 138）
+- src/features/hvh/hvh.hpp：新增 `hook_calls()` 宣告（行 31）
+- src/features/hvh/hvh.cpp：新增 `controller_t::hook_calls()` 實作（約行 143-147）
+- src/render/menu/hvh_page.cpp：STATUS 列數 4→5；新增 Hook Calls 列（行 110-111）
+- src/render/menu/localization.cpp：新增 3 筆（行 136 / 672 / 1326）
+- commit `19bd706`，推送 `myfork main`（`f518399..19bd706`）
+
+### 刪除 (Delete)
+- 無
+
+### 驗證 (Verify)
+- `apply_cmd_fix2.ps1` 輸出：hvh.cpp hook_calls 實作插入於 141 之後；hvh_features.cpp 區塊已替換（297 行）；hvh_page.cpp Hook Calls 列插入於 109 之後；localization.cpp 插入 ru@135 / zh@670 / tw@1323。
+- Select-String 確認：hvh_shared.hpp:138、hvh.hpp:31、hvh.cpp:143/145、hvh_features.cpp 多處、hvh_page.cpp:110/111、localization.cpp:136/672/1326。
+- 尚未本機編譯（無 cmake / cl / clangd）；等待 GitHub Actions Build。
+
+### 工具注意
+- PowerShell 函式若 `return [System.Collections.Generic.List[string]](...)`，回傳時會被列舉成固定大小陣列，後續 `Insert` 會拋「Collection was of a fixed size」。必須在呼叫端以 `[System.Collections.Generic.List[string]](...)` 就地轉型，或直接用 `[System.Collections.Generic.List[string]]::new()` + `AddRange`。
+- compress 摘要中不可含原始 TAB 字元（會破壞 JSON 解析），請用文字 `[tab]` 代替。

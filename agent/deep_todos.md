@@ -27,6 +27,7 @@
 | T-010 | 外部 aimbot 發佈目標視角至 HvH 靜默瞄準通道 | 已完成（CI 通過） | 見下方詳情 |
 | T-011 | CI 產出並打包 vesta_hvh.dll（build artifact 與 release） | 已完成（待 CI 驗證） | 見下方詳情 |
 | T-012 | 修正注入即崩潰：改用 vtable slot 交換取代 5-byte inline hook | 已完成（未經編譯驗證） | 見下方詳情 |
+| T-013 | 修正靜默瞄準/反瞄準：CreateMove 之後改寫指令視角，並新增 Hook 呼叫計數器 | 已完成（未經編譯驗證） | 見下方詳情 |
 
 ---
 
@@ -459,3 +460,48 @@ Operator：「在遊戲內注入就崩潰」。
 
 ### 已知限制
 本次修正只解決「崩潰」並讓 hook 能安全安裝。silent aim 仍需在 UI 開啟，且外部 aimbot 需提供目標角（T-010 已接通），建議在練習模式驗證。
+
+
+## T-013 修正靜默瞄準／反瞄準：CreateMove 之後改寫指令視角
+
+### 來源需求
+操作者回報：反瞄準（spin）看不到效果、無擴散無效、rage lock 原本也無效；並要求把所有「空殼功能」一次列出（m0583）。之後針對 spin／silent 進行本輪修正。
+
+### 根本原因（假設）
+1. 舊 detour 在呼叫原 CreateMove **之前** 就寫入 `CCSGOInput + 0x688` 的視角，但 CreateMove 開頭會由滑鼠輸入重新計算並覆寫視角，等於我們寫的值被蓋掉。
+2. 原本無法判斷 VMT hook 是否真的被引擎呼叫（沒有計數器），因此無法排除「vtable slot 方案本身不成立」。
+
+### 修正內容
+- `src/hvh/hvh_features.cpp`（匿名命名空間整塊改寫，現 297 行）：
+  - `create_move_detour` 改為 **先呼叫原函式**，再寫入角度。
+  - 每次呼叫 `++g_shared->state.hook_calls;`。
+  - `enable_silent && aim.valid` → 將 `aim.pitch` / `wrap_angle(aim.yaw)` 寫入 CUserCmd 的指令視角。
+  - 否則 `enable_antiaim` → `g_spin` 依 `aa_spin_speed` 前進，寫入 `apply_pitch(aa_pitch, angles[0])` 與 `wrap_angle(angles[1] + g_spin)`。
+  - 指令視角位移採 **自我校正**：`locate_command_angles()` 先讀 `self + 0x688` 的即時輸入視角，再於指令緩衝區（0..0x600，step 4）尋找相符的 float 對；找不到則掃描指令內的指標（0..0x200，step 8）及其目標（0..0x400，step 4）。結果快取於 `g_angle_path` / `g_angle_pointer_offset` / `g_angle_offset`；`command_angles()` 回傳可寫的 `float*`。
+  - 角度 **故意不還原**（寫入必須流向送出的指令）。
+  - `angle_pair_matches()`：pitch 差 < 1.0f 且 `wrap_angle` 後的 yaw 差 < 1.0f，並以 `readable()` 保護。
+- `src/hvh_shared/hvh_shared.hpp`：`k_version` 3 → 4；`status` 新增 `std::int32_t hook_calls{ 0 };`（緊接 `hook_ready` 之後）。
+- `src/features/hvh/hvh.hpp`：新增 `[[nodiscard]] int hook_calls( ) const;`。
+- `src/features/hvh/hvh.cpp`：新增 `controller_t::hook_calls()` 實作（回傳 `m_view->state.hook_calls`，無效時回 0）。
+- `src/render/menu/hvh_page.cpp`：HVH STATUS 卡片列數 4 → 5，新增 `Hook Calls` 列（`std::to_string(hvh.hook_calls())`）。
+- `src/render/menu/localization.cpp`：新增 3 筆 `Hook Calls` 在地化（ru 行 136、zh 行 672、tw 行 1326）。
+
+### 變更檔案
+- src/hvh/hvh_features.cpp
+- src/hvh_shared/hvh_shared.hpp
+- src/features/hvh/hvh.hpp
+- src/features/hvh/hvh.cpp
+- src/render/menu/hvh_page.cpp
+- src/render/menu/localization.cpp
+
+### 提交
+- commit `19bd706`（訊息：fix(hvh): rewrite command angles after CreateMove and add a hook-call counter），父 `f518399`，已推送 `myfork/main`。
+
+### 驗證狀態
+- 尚未經本機編譯（本機無 cmake / cl / clangd）；已推送等待 GitHub Actions Build 驗證（預期 vesta.exe + vesta_hvh.dll + ctest 55/55）。
+
+### 已知限制
+- 本輪只確保「寫入時機正確」與「可觀測 hook 是否被呼叫」。
+- 若 `Hook Calls` 為 0 → 表示 VMT hook 根本沒被呼叫，需改回安全長度解碼的 inline hook（trampoline）或改用其他掛鉤點。
+- 若 `Hook Calls` > 0 但 spin／silent 仍無效 → 表示指令角度定位失敗或引擎另有覆寫點，需記錄 CreateMove 參數（`%TEMP%\vesta_hvh.log`）或把 CUserCmd 指標發佈到共享記憶體離線分析。
+- 無擴散／無後座仍為空殼：需將 `m_fAccuracyPenalty` 等 schema 位移由外部發佈或針對本版本硬編碼後才能作用。
