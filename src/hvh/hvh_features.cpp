@@ -12,11 +12,11 @@ namespace vesta::hvh::features
 		float g_spin{ 0.0f };
 
 		// The live view angles were proven at CCSGOInput + 0x688 (pitch, yaw,
-		// roll) for this build via a motion-diff of the running game. CreateMove
-		// is CCSGOInput::CreateMove, so its first argument is the CCSGOInput
-		// instance and its third argument is the CUserCmd the server will see.
+		// roll) for this build via a motion-diff of the running game, and the
+		// third person camera flag sits at CCSGOInput + 0x5201. CreateMove is
+		// CCSGOInput::CreateMove, so its first argument is that instance.
 		constexpr std::uintptr_t k_view_angles_offset{ 0x688 };
-		constexpr std::uintptr_t k_third_person_offset{ 0x228 };
+		constexpr std::uintptr_t k_third_person_offset{ 0x5201 };
 
 		using create_move_fn = bool( * )( void*, void*, void* );
 		create_move_fn g_original{ nullptr };
@@ -174,14 +174,11 @@ namespace vesta::hvh::features
 				return false;
 			}
 
-			// The original rebuilds the command from the mouse delta, so the aim
-			// angles are rewritten afterwards to survive into the outgoing command.
-			const bool result = g_original( self, first, second );
-
 			if ( !g_shared )
 			{
-				return result;
+				return g_original( self, first, second );
 			}
+
 			++g_detour_calls;
 			++g_shared->state.hook_calls;
 			if ( !g_first_call_logged )
@@ -193,28 +190,36 @@ namespace vesta::hvh::features
 
 			const auto& config = g_shared->config;
 			const auto& aim = g_shared->aim;
-			const bool silent = config.enable_silent != 0 && aim.valid != 0;
-			const bool antiaim = config.enable_antiaim != 0;
-			if ( config.enable_thirdperson != 0 )
+
+			// Third person is a plain bool on the input object for this build.
 			{
-				auto* mode = reinterpret_cast< std::int32_t* >(
-					reinterpret_cast< std::uint8_t* >( self ) + k_third_person_offset );
-				if ( readable( mode, sizeof( std::int32_t ) ) )
+				auto* camera = reinterpret_cast<std::uint8_t*>( self ) + k_third_person_offset;
+				if ( readable( camera, sizeof( std::uint8_t ) ) )
 				{
-					*mode = 256;
+					*camera = config.enable_thirdperson != 0 ? 1 : 0;
 				}
 			}
 
+			const bool silent = config.enable_silent != 0 && aim.valid != 0;
+			const bool antiaim = config.enable_antiaim != 0;
 			if ( !silent && !antiaim )
 			{
-				return result;
+				return g_original( self, first, second );
 			}
 
-			auto* angles = command_angles( self, second );
-			if ( !angles )
+			// The game builds the outgoing command and its move checksum from the
+			// input view angles, so they are overwritten here and restored right
+			// after the original runs. Restoring keeps the local camera still.
+			auto* angles = reinterpret_cast<float*>(
+				reinterpret_cast<std::uint8_t*>( self ) + k_view_angles_offset );
+			if ( !readable( angles, sizeof( float ) * 3u ) )
 			{
-				return result;
+				return g_original( self, first, second );
 			}
+
+			const float saved_pitch = angles[ 0 ];
+			const float saved_yaw = angles[ 1 ];
+			const float saved_roll = angles[ 2 ];
 
 			if ( silent )
 			{
@@ -227,6 +232,12 @@ namespace vesta::hvh::features
 				angles[ 0 ] = apply_pitch( config.aa_pitch, angles[ 0 ] );
 				angles[ 1 ] = wrap_angle( angles[ 1 ] + g_spin );
 			}
+
+			const bool result = g_original( self, first, second );
+
+			angles[ 0 ] = saved_pitch;
+			angles[ 1 ] = saved_yaw;
+			angles[ 2 ] = saved_roll;
 			return result;
 		}
 
