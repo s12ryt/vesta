@@ -342,3 +342,27 @@ Build run `37200449525`：**success**。
 ### 工具注意
 - PowerShell 函式若 `return [System.Collections.Generic.List[string]](...)`，回傳時會被列舉成固定大小陣列，後續 `Insert` 會拋「Collection was of a fixed size」。必須在呼叫端以 `[System.Collections.Generic.List[string]](...)` 就地轉型，或直接用 `[System.Collections.Generic.List[string]]::new()` + `AddRange`。
 - compress 摘要中不可含原始 TAB 字元（會破壞 JSON 解析），請用文字 `[tab]` 代替。
+## 2026-10-05 — T-014 / T-015 / T-016
+
+### 讀取 (Read)
+- `src/hvh/hvh_features.cpp`（全文，含 anonymous namespace 助手與 detour）
+- `src/hvh/hvh_internal.hpp`、`src/hvh/dllmain.cpp`、`src/features/hvh/hvh.{hpp,cpp}`、`src/hvh_shared/hvh_shared.hpp`
+- `src/render/menu/hvh_page.cpp`、`src/render/menu/localization.cpp`、`CMakeLists.txt`
+- 研究來源：Broshan1337/gamesense cs2 `CCSGOInput.h`、VeryElusive/internal-cheat-sdk `ccsgoinput.h`、7sim/CS2-Internal `sdk.h`、sapdragon/Oversee `ThirdPerson.cpp`
+
+### 寫入 (Write / Edit)
+- `src/hvh/hvh_features.cpp`：節流命令角度搜尋（T-014）；`k_third_person_offset` 0x228 → 0x5201、detour 改為「先寫輸入視角、呼叫原函式、再還原」並加入第三人稱位元組寫入（T-015 / T-016）；移除多餘右大括號
+- `src/hvh_shared/hvh_shared.hpp`：`k_version` 4 → 5、新增 `enable_thirdperson`
+- `src/features/hvh/hvh.hpp` / `hvh.cpp`：新增 `hook_calls()` 存取子與 `enable_thirdperson` 的 load/save
+- `src/render/menu/hvh_page.cpp`：HVH STATUS 增加 Hook Calls 列、新增 CAMERA 卡片
+- `src/render/menu/localization.cpp`：ru / zh / zh-Hant 新增 Hook Calls、CAMERA、Third Person
+- 暫存腳本：`C:\Users\yoyo2\AppData\Local\Temp\opencode\apply_silent_order.ps1`（含修補流程）
+
+### 刪除 (Delete)
+- 無檔案刪除；「刪除」僅指移除 `hvh_features.cpp` 中殘留的舊 detour 片段（line 243..289）與一個多餘右大括號
+
+### 驗證 (Verify)
+- `hvh_features.cpp` 大括號最終深度 = 0；`0x5201` 出現 2 次、`0x228` 為 0
+- commit 5e006e8 "fix(hvh): write input view angles before CreateMove and use the real third-person flag"（1 file changed, +31/-20），已推送 `a4affa9..5e006e8` 至 myfork/main
+- Build 37235101905 成功（vesta.exe + vesta_hvh.dll + ctest 55/55）
+- 標記 `v1.1.9-spinupup7`（annotated，指向 5e006e8）並推送，觸發 Release

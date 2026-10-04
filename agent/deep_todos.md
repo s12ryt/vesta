@@ -28,6 +28,9 @@
 | T-011 | CI 產出並打包 vesta_hvh.dll（build artifact 與 release） | 已完成（待 CI 驗證） | 見下方詳情 |
 | T-012 | 修正注入即崩潰：改用 vtable slot 交換取代 5-byte inline hook | 已完成（未經編譯驗證） | 見下方詳情 |
 | T-013 | 修正靜默瞄準/反瞄準：CreateMove 之後改寫指令視角，並新增 Hook 呼叫計數器 | 已完成（未經編譯驗證） | 見下方詳情 |
+| T-014 | 節流命令角度搜尋，修正 Spin / Silent Aim 造成的大量延遲 | 已完成（經 CI 驗證） | 見下方詳情 |
+| T-015 | 新增第三人稱相機開關（CAMERA 卡片） | 已完成（經 CI 驗證） | 見下方詳情 |
+| T-016 | 改為在呼叫原 CreateMove 前寫入輸入視角，並使用真正的第三人稱旗標 0x5201 | 已完成（經 CI 驗證） | 見下方詳情 |
 
 ---
 
@@ -505,3 +508,45 @@ Operator：「在遊戲內注入就崩潰」。
 - 若 `Hook Calls` 為 0 → 表示 VMT hook 根本沒被呼叫，需改回安全長度解碼的 inline hook（trampoline）或改用其他掛鉤點。
 - 若 `Hook Calls` > 0 但 spin／silent 仍無效 → 表示指令角度定位失敗或引擎另有覆寫點，需記錄 CreateMove 參數（`%TEMP%\vesta_hvh.log`）或把 CUserCmd 指標發佈到共享記憶體離線分析。
 - 無擴散／無後座仍為空殼：需將 `m_fAccuracyPenalty` 等 schema 位移由外部發佈或針對本版本硬編碼後才能作用。
+## T-014 修正 Spin / Silent Aim 造成的延遲
+
+### 根本原因
+`src/hvh/hvh_features.cpp` 的 `locate_command_angles()` 在每次 CreateMove 呼叫時都會重跑（因為從未找到匹配而快取一直是 `angle_path::none`），而每個候選探測都呼叫 `readable()`（內部是 `VirtualQuery`，屬於核心系統呼叫）。單次呼叫最壞情況約為 384 次直接掃描 + 64 個指標 × 256 次掃描 ≈ 16,000 次系統呼叫，且每個 tick 都重複，因而造成嚴重卡頓。
+
+### 修正（commit ddae90e）
+- `angle_pair_matches()` 不再呼叫 `readable()`，改為純浮點比較；由呼叫端一次驗證整個範圍。
+- `locate_command_angles()` 對命令緩衝區只做一次 `readable( command, 0x600 )`，每個候選指標也只做一次 `readable( target, 0x400 )`。
+- `command_angles()` 加上節流：未定位時僅在 `g_detour_calls % 128 == 1` 時嘗試，最多 5 次，之後設定 `g_locate_gave_up` 並記錄 log，之後完全不再嘗試。
+- 新增 log：進入 detour、定位成功（直接或經指標）、放棄。
+
+### 驗證
+GitHub Actions Build 37226995120（head a4affa9）成功；但 ddae90e 本身未通過編譯（見 T-016 的大括號問題），日後續一併修正。
+
+## T-015 新增第三人稱相機開關
+
+### 設計
+- 共享契約 `vesta::hvh_shared`：`k_version` 4 → 5，新增 `std::int32_t enable_thirdperson{ 0 };`。
+- 外部 `features::hvh::controller_t` 的 `load()` / `save()` 讀寫 `enable_thirdperson`（存於 `hvh.json`）。
+- UI：HVH 頁面在 ACCURACY 卡片後新增 `CAMERA` 卡片，含 `Third Person` 開關。
+- 在地化：ru / zh / zh-Hant 各新增 `CAMERA`、`Third Person`。
+
+### 驗證
+- 初版把 `CCSGOInput + 0x228` 當成旗標並寫入 256（依據操作者指示測試）。
+- 後續查證社群原始碼（VeryElusive/internal-cheat-sdk、7sim/CS2-Internal、sapdragon/Oversee）確認本版 `m_bCameraInThirdPerson` 位於 `CCSGOInput + 0x5201`（布林），並在 T-016 更正；`0x228` 在每次快照中都固定為 256，並非旗標。
+- commit 1fe4bb6；因殘留大括號導致建置失敗，於 T-016 修正（a4affa9）。
+
+## T-016 於呼叫原 CreateMove 前寫入輸入視角
+
+### 根本原因
+原本的 detour 先呼叫原函式、之後才改寫命令角度。社群研究指出 `move_crc` 由 `WriteMoveCrc`（vtable slot 7）以 {viewangles, buttons} 計算，改寫「已完成」的命令只會影響第一個 subtick；正確做法是在呼叫原 CreateMove「之前」改寫 CCSGOInput 上的原始視角，讓遊戲自行以該角度建立命令與 CRC，呼叫後再還原，本機視角因此不動（即真正的靜默瞄準）。
+
+### 修正（commit 5e006e8）
+- `create_move_detour` 重寫：先處理第三人稱（`*camera = config.enable_thirdperson != 0 ? 1 : 0`，1 位元組），若 silent / antiaim 皆未啟用則直接回傳原函式結果。
+- 啟用時：讀取 `CCSGOInput + 0x688` 的三個浮點（pitch/yaw/roll）→ 備份 → 寫入目標角度（silent 用外部 aimbot 發布的 `aim.pitch/yaw`；antiaim 用 `apply_pitch` 與 `wrap_angle(yaw + g_spin)`）→ 呼叫原 CreateMove → 還原三個浮點。
+- `k_third_person_offset` 由 `0x228` 改為 `0x5201`。
+- 同時修掉 `hvh_features.cpp` 中一個多餘的右大括號（早先修補時造成深度為 -1，`namespace vesta::hvh::features` 提前關閉，導致 `g_shared` 等符號在命名空間外不可見；編譯錯誤 C2065 起於第 270 行）。
+
+### 驗證
+- Build 37235101905（head 5e006e8）成功：`vesta.exe` + `vesta_hvh.dll` + ctest 55/55。
+- 標記 `v1.1.9-spinupup7`。
+- 待操作者在遊戲內實測：Spin / Silent Aim 是否生效、第三人稱是否可用、是否仍有卡頓。
