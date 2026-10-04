@@ -11,6 +11,14 @@ namespace vesta::hvh::features
 		inline_hook g_hook{};
 		float g_spin{ 0.0f };
 
+		// The live view angles were proven at CCSGOInput + 0x688 (pitch, yaw,
+		// roll) for this build via a motion-diff of the running game. CreateMove
+		// is CCSGOInput::CreateMove, so its first argument is the CCSGOInput
+		// instance. We rewrite the input angles, run the original so the outgoing
+		// command carries them, then restore them so the player's own camera
+		// never moves (silent aim / anti-aim).
+		constexpr std::uintptr_t k_view_angles_offset{ 0x688 };
+
 		// CreateMove ABI is game-version specific. The detour forwards the raw
 		// arguments to the trampolined original and only touches state when the
 		// module has a verified signature for the surrounding structures.
@@ -27,39 +35,60 @@ namespace vesta::hvh::features
 			return value - 180.0f;
 		}
 
+		// Resolves the writable view-angle triple inside the CCSGOInput object,
+		// or nullptr when the object is unreachable this tick.
+		[[nodiscard]] float* view_angles( void* self )
+		{
+			if ( !self )
+			{
+				return nullptr;
+			}
+			auto* address = reinterpret_cast<std::uint8_t*>( self ) + k_view_angles_offset;
+			if ( !readable( address, sizeof( float ) * 3u ) )
+			{
+				return nullptr;
+			}
+			return reinterpret_cast<float*>( address );
+		}
+
 		bool __fastcall create_move_detour( void* self, void* first, void* second )
 		{
-			const bool result = g_original ? g_original( self, first, second ) : false;
-
 			if ( !g_shared )
 			{
-				return result;
+				return g_original ? g_original( self, first, second ) : false;
 			}
-			const auto& config = g_shared->config;
 
-			// Anti-aim math is only meaningful once we know where the command
-			// viewangles live. Until a build-verified signature is supplied this
-			// path stays inert instead of writing to a guessed address.
+			const auto& config = g_shared->config;
+			const auto& command = g_shared->aim;
 			const bool antiaim = config.enable_antiaim != 0;
-			const bool silent = config.enable_silent != 0;
-			if ( !antiaim && !silent )
+			const bool silent = config.enable_silent != 0 && command.valid != 0;
+
+			// Neither path is active: stay a pure passthrough.
+			auto* angles = ( antiaim || silent ) ? view_angles( self ) : nullptr;
+			if ( !angles )
 			{
-			return result;
+				return g_original ? g_original( self, first, second ) : false;
 			}
-			if ( g_shared->sigs.input[ 0 ] == '\0' )
-			{
-			return result;
-			}
-			if ( config.enable_antiaim != 0 )
-			{
-				g_spin = wrap_angle( g_spin + static_cast<float>( config.aa_spin_speed ) );
-				( void )g_spin;
+
+			const float saved[ 3 ]{ angles[ 0 ], angles[ 1 ], angles[ 2 ] };
+
 			if ( silent )
 			{
-			g_spin = wrap_angle( g_spin + static_cast<float>( config.silent_fov ) );
+				angles[ 0 ] = command.pitch;
+				angles[ 1 ] = wrap_angle( command.yaw );
 			}
+			if ( antiaim )
+			{
+				g_spin = wrap_angle( g_spin + static_cast<float>( config.aa_spin_speed ) );
+				angles[ 0 ] = apply_pitch( config.aa_pitch, angles[ 0 ] );
+				angles[ 1 ] = wrap_angle( angles[ 1 ] + g_spin );
 			}
 
+			const bool result = g_original ? g_original( self, first, second ) : false;
+
+			angles[ 0 ] = saved[ 0 ];
+			angles[ 1 ] = saved[ 1 ];
+			angles[ 2 ] = saved[ 2 ];
 			return result;
 		}
 	}

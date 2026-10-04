@@ -7,7 +7,7 @@
 namespace vesta::hvh_shared
 {
 	inline constexpr std::uint32_t k_magic = 0x56485648u; // 'HVHV'
-	inline constexpr std::uint32_t k_version = 2u;
+	inline constexpr std::uint32_t k_version = 3u;
 	inline constexpr std::size_t k_signature_length = 160;
 
 	// Local\ per-session mapping. Both sides open it by name; the game runs in
@@ -119,6 +119,16 @@ namespace vesta::hvh_shared
 		char entity_list[k_signature_length]{};
 	};
 
+	// Target angle published by the external client for silent aim. The DLL
+	// rewrites the command view angles for one tick and restores them, so the
+	// shot follows the target while the player's camera stays put.
+	struct aim_command
+	{
+		std::int32_t valid{ 0 };
+		float pitch{ 0.0f };
+		float yaw{ 0.0f };
+	};
+
 	// The DLL is the only writer; the external client only reads this half.
 	struct status
 	{
@@ -142,6 +152,7 @@ namespace vesta::hvh_shared
 		std::uint32_t reserved{ 0 };
 		settings config{};
 		signatures sigs{};
+		aim_command aim{};
 		status state{};
 	};
 

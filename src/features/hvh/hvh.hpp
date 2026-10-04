@@ -37,6 +37,7 @@ namespace features::hvh {
 
 		vesta::hvh_shared::settings settings{};
 		vesta::hvh_shared::signatures signatures{};
+		vesta::hvh_shared::aim_command aim{};
 
 	private:
 		bool ensure_mapping( );

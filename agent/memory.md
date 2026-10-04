@@ -227,3 +227,21 @@ Build run `37200449525`：**success**。
 - 樣式掃描：Vesta 既有五個樣式各 1 命中；本版 CreateMove 序文唯一命中 RVA 0xD01B20。
 - 虛擬表列舉：起點 0x1C9AD58；idx 5 CreateMovePrePrediction、idx 8 ValidateInput、idx 25 CreateMove。
 - 提交 `f1bd6a6` 並推送 `myfork/main`（`1919bd8..f1bd6a6`）；待 CI（未經本機編譯）。
+
+## 2026-10-04 — T-009 實作靜默瞄準／反瞄準命令寫入
+
+### 讀取
+- src/hvh/hvh_features.cpp、src/hvh/hvh_internal.hpp、src/hvh_shared/hvh_shared.hpp。
+- 即時記憶體：read_diff2.ps1（動態差分）確認 view angles = CCSGOInput+0x688。
+
+### 寫入
+- src/hvh_shared/hvh_shared.hpp（version 3 + aim_command）
+- src/features/hvh/hvh.hpp、src/features/hvh/hvh.cpp（aim 成員 + 三處同步）
+- src/hvh/hvh_features.cpp（detour 重寫）
+
+### 刪除
+- src/hvh/hvh_features.cpp 先刪除再重寫（write 工具需先移除既有檔）。
+
+### 驗證
+- Select-String：shared k_version=3u / aim_command x2 / aim_command aim{} x1；hvh.hpp aim x1；hvh.cpp m_view->aim x3；hvh_features.cpp 192 行、含 k_view_angles_offset 0x688。
+- 尚未本機編譯；待 GitHub Actions Build。

@@ -62,6 +62,7 @@ namespace features::hvh {
 		}
 		m_view->config = settings;
 		m_view->sigs = signatures;
+		m_view->aim = aim;
 		m_view->state.unload_request = 0;
 		return true;
 	}
@@ -105,6 +106,7 @@ namespace features::hvh {
 		// Only the config half is written so the DLL's status half is preserved.
 		m_view->config = settings;
 		m_view->sigs = signatures;
+		m_view->aim = aim;
 	}
 
 	inject_status controller_t::status( ) const
@@ -178,6 +180,7 @@ namespace features::hvh {
 		m_view->state.unload_request = 0;
 		m_view->config = settings;
 		m_view->sigs = signatures;
+		m_view->aim = aim;
 
 		const auto pid = static_cast<DWORD>( app::context().process.process_id( ) );
 		if ( pid == 0 )

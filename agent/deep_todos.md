@@ -23,6 +23,7 @@
 | T-006 | 內部靜默瞄準增量（shared v2、簽名通道、UI 卡片、持久化） | 已完成（未經編譯驗證） | 見下方詳情 |
 | T-007 | 新增可選「極限穿牆」(Extreme Wall) 自動穿牆模式 | 已完成（未經編譯驗證） | 見下方詳情 |
 | T-008 | 反編譯取得本機 client.dll 的 CreateMove 簽名並內建至 DLL | 已完成（未經編譯驗證） | 見下方詳情 |
+| T-009 | 實作靜默瞄準／反瞄準命令寫入（本機實測 view angles = CCSGOInput+0x688） | 已完成（未經編譯驗證） | 見下方詳情 |
 
 ---
 
@@ -343,3 +344,26 @@
 **驗證狀態**：本機無編譯器（cmake/cl/clangd 皆不在 PATH）→ 未經本機編譯；已提交並推送 `f1bd6a6`，待 GitHub Actions Build 驗證（vesta.exe + vesta_hvh.dll + ctest 55/55）。
 
 **已知限制**：真正的靜默瞄準仍需 `CUserCmd` 的 viewangles 位移（尚未推導），以及安全的地動函式回傳型別（CreateMove 可能回傳 double，目前 detour 以 bool 處理）。簽名內建後，DLL 會找到並掛上 CreateMove，但除非使用者在 UI 啟用反瞄準／靜默（預設關閉）且 `sigs.input` 非空，detour 僅為安全的 passthrough。
+
+## T-009 實作靜默瞄準／反瞄準命令寫入（本機實測 view angles）
+
+來源需求：m0454「做吧」。Operator 在練習模式中提供即時 CS2 連線，讓本機讀取記憶體取得參數。
+
+### 取得參數（實測）
+- 讀取方式：PowerShell + kernel32（OpenProcess/ReadProcessMemory）；CCSGOInput 靜態物件 = client.dll 基底 + 0x2576150（其 +0x00 為 vtable 指標 = 基底 + 0x1C9AD58）。
+- 以「動態差分」(motion-diff) 在 Operator 移動滑鼠時比對：0x688 (3.327→5.500)、0x68C (40.518→9.083) 隨之改變。
+- 結論：view angles（pitch, yaw, roll）= **CCSGOInput + 0x688**。另有鏡像副本於 0x2A0/0x2A4、0x758/0x75C。
+- CreateMove = CCSGOInput vtable idx 25，RVA 0xD01B20（簽名已於 T-008 內建）；CreateMove 的 this 即 CCSGOInput*。
+
+### 變更
+- `src/hvh_shared/hvh_shared.hpp`：k_version 2→3；新增 `struct aim_command { int32 valid; float pitch; float yaw; }`；`shared_state` 於 sigs 與 state 之間新增 `aim_command aim{}`。
+- `src/features/hvh/hvh.hpp`：controller 新增 `vesta::hvh_shared::aim_command aim{}`。
+- `src/features/hvh/hvh.cpp`：ensure_mapping/publish/inject 三處同步 `m_view->aim = aim;`。
+- `src/hvh/hvh_features.cpp`：create_move_detour 重寫 —— 解析 `self+0x688` 的三個 float，備份 → 若 silent 且 aim.valid 寫入 command.pitch/yaw → 若 antiaim 寫入 spin/pitch → 呼叫原始 CreateMove → 還原三個角度（相機不動 = 靜默）。
+
+### 驗證狀態
+本機無編譯器（無 cmake/cl/clangd），已推 myfork 交由 GitHub Actions Build 驗證。
+
+### 已知限制
+- 反瞄準（spin/pitch）可獨立運作；靜默瞄準需要外部端在 `aim` 內發布目標角度（valid/pitch/yaw），目前外部尚未計算並發布 → 啟用靜默瞄準暫不生效，待下一步把 Vesta 既有瞄準角度寫入 aim。
+- 回傳型別：CreateMove 可能回傳 double；detour 以 bool 回傳，但原始呼叫的 xmm0 未被覆寫，故兩種情形皆可保留原回傳值。
