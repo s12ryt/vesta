@@ -366,3 +366,27 @@ Build run `37200449525`：**success**。
 - commit 5e006e8 "fix(hvh): write input view angles before CreateMove and use the real third-person flag"（1 file changed, +31/-20），已推送 `a4affa9..5e006e8` 至 myfork/main
 - Build 37235101905 成功（vesta.exe + vesta_hvh.dll + ctest 55/55）
 - 標記 `v1.1.9-spinupup7`（annotated，指向 5e006e8）並推送，觸發 Release
+
+
+## 2026-10-06 — T-017 依現代 CS2 內部外掛改寫 CreateMove（寫入 CUserCmd 視角）
+
+### 讀取 (Read)
+- `src/hvh/hvh_features.cpp`（改寫前 353 行）——既有 detour、`k_view_angles_offset`、`k_third_person_offset`、舊的 `locate_command_angles` 節流搜尋。
+- `src/hvh/hvh_internal.hpp`——確認 `safe_read` 是 inline template、`readable` / `patch` / `vtable_hook` / `find_pointer_entry` 可用。
+- `agent/deep_todos.md`（任務表 T-001..T-016）——確認插入點。
+
+### 寫入 (Write / Edit)
+- `src/hvh/hvh_features.cpp`：以 PowerShell 腳本 `apply_cmd_write.ps1` 改寫第 8..242 行（匿名命名空間＋detour）。新增 `command_angles()` 與 CUserCmd 偏移常數（0x30 / 0x40 / 0x18），detour 改為 `double` 回傳、先呼叫原函式再寫 CUserCmd 視角；反向瞄準寫絕對 spin yaw 且同步寫 `CCSGOInput+0x688`（本機可見），靜默瞄準寫目標角度後還原輸入視角。
+- `agent/deep_todos.md`：新增 T-017 任務列與本節。
+- `agent/memory.md`：新增本節。
+
+### 刪除 (Delete)
+- 無檔案刪除。程式碼層面移除了舊的 `enum class angle_path`、`g_angle_path`、`g_angle_pointer_offset`、`g_angle_offset`、`g_detour_calls`、`g_locate_attempts`、`g_locate_gave_up`、`locate_command_angles()`、`angle_pair_matches()` 與節流用的 `command_angles( self, command )` 搜尋版本。
+
+### 驗證 (Verify)
+- 改寫前後：`lines before = 354` / `lines after = 284`（另一次量測為 353 → 283），括號 `delta = 0`。
+- Select-String 計數：`command_angles = 2`、`k_cmd_base_offset = 2`、`create_move_fn = 3`。
+- `git diff --stat`：`src/hvh/hvh_features.cpp | 294 ++++---`（1 file changed, 112 insertions(+), 182 deletions(-)）。
+- commit `7b749df`「fix(hvh): steer the CUserCmd view angles the way modern CS2 internals do」推送 `9a2a3d8..7b749df` 至 myfork/main。
+- GitHub Actions Build run `37477454224` = **success**（7m35s；Configure/Build/menu-render test/Test/Upload executable 全通過；唯一註記為 Node.js 20 deprecation）。
+- tag `v1.1.9-spinupup8`（annotated，指向 7b749df）已推送，觸發 Release workflow。

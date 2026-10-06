@@ -31,6 +31,7 @@
 | T-014 | 節流命令角度搜尋，修正 Spin / Silent Aim 造成的大量延遲 | 已完成（經 CI 驗證） | 見下方詳情 |
 | T-015 | 新增第三人稱相機開關（CAMERA 卡片） | 已完成（經 CI 驗證） | 見下方詳情 |
 | T-016 | 改為在呼叫原 CreateMove 前寫入輸入視角，並使用真正的第三人稱旗標 0x5201 | 已完成（經 CI 驗證） | 見下方詳情 |
+| T-017 | 依現代 CS2 內部外掛改寫 CreateMove：寫入 CUserCmd 視角（靜默瞄準＋可見反向瞄準） | 已完成（本機無編譯器，GitHub Actions 通過） | 見下方詳情 |
 
 ---
 
@@ -550,3 +551,44 @@ GitHub Actions Build 37226995120（head a4affa9）成功；但 ddae90e 本身未
 - Build 37235101905（head 5e006e8）成功：`vesta.exe` + `vesta_hvh.dll` + ctest 55/55。
 - 標記 `v1.1.9-spinupup7`。
 - 待操作者在遊戲內實測：Spin / Silent Aim 是否生效、第三人稱是否可用、是否仍有卡頓。
+
+
+## T-017 依現代 CS2 內部外掛改寫 CreateMove：寫入 CUserCmd 視角
+
+### 來源需求
+Operator：「你去看看那些最近有更新的hvh倉庫看看他們到底怎麼實現的」。
+
+### 研究結論（VeryElusive/internal-cheat-sdk、PELover/CS2-Internal-Cheat、sapdragon/Oversee 等）
+- CreateMove 原型是 `double __fastcall ( CCSGOInput* pThis, unsigned int slot, CUserCmd* pCmd )`：回傳 **double**，第三個參數才是 `CUserCmd*`。
+- 視角鏈：`CUserCmd::pBase @0x30` → `CBaseUserCmdPB::pViewangles @0x40` → `CCmdQAngle::angValue @0x18`（pitch, yaw, roll）。`sizeof( CUserCmd ) == 0x88`，`sizeof( CBaseUserCmdPB ) == 0x80`，`sizeof( CCmdQAngle ) == 0x24`。
+- 呼叫順序：多數實作 **先呼叫原函式**（讓引擎把指令建好），再修改 `CUserCmd`。
+- 反向瞄準（anti-aim）寫完 **不還原** → 本機視角可見（spin 看得見）；靜默瞄準（silent aim）寫完要 **還原輸入視角** → 相機不動。
+- VeryElusive 的 spin 是 **絕對角度**：`rotatedYaw += speed; yaw = rotatedYaw;`（不是累加）。
+- 第三人稱：`CCSGOInput::m_bCameraInThirdPerson @0x5201`（bool，每幀設 true）。
+- bhop：地面時把指令 `nButtons` 的 `IN_JUMP` 清掉（`m_fFlags & 1`）；no-spread：把某個全域 +0x58 的 bool 設為 true。
+
+### 舊實作的四個錯誤
+1. 函式型別用 `bool(*)(void*,void*,void*)`，與實際的 `double(...)(CCSGOInput*,unsigned int,CUserCmd*)` 不符。
+2. 只寫 `CCSGOInput + 0x688` 又立刻還原 → 反向瞄準完全看不到效果。
+3. 完全沒有碰 `CUserCmd` → 送出的指令不受影響，等於沒改到真正要改的東西。
+4. 帶著一個節流的暴力搜尋（`locate_command_angles`），永遠對不上、又拖慢 CreateMove。
+
+### 修正內容（src/hvh/hvh_features.cpp 第 8..242 行改寫；353 → 283 行，括號平衡）
+- `using create_move_fn = double( * )( void*, unsigned int, void* );`
+- 新增常數：`k_cmd_base_offset{ 0x30 }`、`k_base_viewangles_offset{ 0x40 }`、`k_angles_value_offset{ 0x18 }`；保留 `k_view_angles_offset{ 0x688 }`、`k_third_person_offset{ 0x5201 }`。
+- 新增 `command_angles( void* command )`：走 `pBase(0x30)` → `pViewangles(0x40)` → `+0x18` 取得可寫入的 `float*`，全程用 `safe_read` + `readable` 邊界檢查。
+- detour 流程：`hook_calls++` → 寫第三人稱旗標 → **先呼叫原函式** → 取得 CUserCmd 角度指標 → 反向瞄準寫入 **絕對** spin yaw（並同步把 `CCSGOInput+0x688` 也寫成 spin，本機才看得見）／靜默瞄準寫入目標角度並還原輸入視角 → 回傳原函式結果。
+- 移除舊的 `angle_path` / `locate_command_angles` / `angle_pair_matches` 搜尋機制與其節流變數。
+
+### 變更檔案
+- `src/hvh/hvh_features.cpp`（本次唯一變更檔）
+
+### 驗證狀態
+- 本機沒有編譯器（無 cmake/cl/clangd），以 GitHub Actions 為唯一驗證。
+- Build run `37477454224`（commit `7b749df`）= **success**（`vesta.exe` + `vesta_hvh.dll` 皆建置成功，ctest 55/55）。
+- 已建立並推送 annotated tag `v1.1.9-spinupup8` 觸發 Release。
+
+### 已知限制
+- `CUserCmd::pBase(0x30)` / `pViewangles(0x40)` / `angValue(0x18)` 這組偏移來自公開 SDK 與本機實測以外的來源，**未逐一在本機驗證**；若這版 client.dll 佈局不同，`%TEMP%\vesta_hvh.log` 會出現 `the command view angles could not be resolved; aim writes stay disabled`，那就代表偏移要重新對。
+- 靜默瞄準仍需要外部 aimbot 鎖定目標並發布 `aim.valid`，否則 detour 會早退。
+- HVH 頁面的 MOVEMENT 卡片（Bunny Hop / Auto Stop）仍是空殼：真正的連跳在 Misc → Movement（且必須設定 Activation Key，activation_key 為 0 時永遠不會觸發）。
