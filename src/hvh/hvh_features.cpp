@@ -72,104 +72,110 @@ namespace vesta::hvh::features
 		}
 	}
 
-	double __fastcall create_move_detour( void* self, unsigned int slot, void* command )
+double __fastcall create_move_detour( void* self, unsigned int slot, void* command )
+{
+	if ( !g_original )
 	{
-		if ( !g_original )
-		{
-			return 0.0;
-		}
-		if ( !g_shared )
-		{
-			return g_original( self, slot, command );
-		}
+		return 0.0;
+	}
+	if ( !g_shared )
+	{
+		return g_original( self, slot, command );
+	}
 
-		++g_shared->state.hook_calls;
-		if ( !g_first_call_logged )
-		{
-			g_first_call_logged = true;
-			log_line( "create_move detour entered (self=%p command=%p)",
-				static_cast< const void* >( self ), static_cast< const void* >( command ) );
-		}
+	++g_shared->state.hook_calls;
+	if ( !g_first_call_logged )
+	{
+		g_first_call_logged = true;
+		log_line( "create_move detour entered (self=%p command=%p)",
+			static_cast<const void*>( self ), static_cast<const void*>( command ) );
+	}
 
-		const auto& config = g_shared->config;
-		const auto& aim = g_shared->aim;
+	const auto& config = g_shared->config;
+	const auto& aim = g_shared->aim;
 
-		// Third person is a plain bool on the input object for this build.
+	// Third person is a plain bool on the input object for this build.
+	{
+		auto* flag = reinterpret_cast<std::uint8_t*>( self ) + k_third_person_offset;
+		if ( readable( flag, sizeof( std::uint8_t ) ) )
 		{
-			auto* camera = reinterpret_cast< std::uint8_t* >( self ) + k_third_person_offset;
-			if ( readable( camera, sizeof( std::uint8_t ) ) )
+			if ( config.enable_thirdperson != 0 )
 			{
-				*camera = config.enable_thirdperson != 0 ? 1 : 0;
+				*flag = 1;
 			}
 		}
+	}
 
-		const bool silent = config.enable_silent != 0 && aim.valid != 0;
-		const bool antiaim = config.enable_antiaim != 0;
-		if ( !silent && !antiaim )
-		{
-			return g_original( self, slot, command );
-		}
+	const bool silent = config.enable_silent != 0 && aim.valid != 0;
+	const bool antiaim = config.enable_antiaim != 0;
+	if ( !silent && !antiaim )
+	{
+		return g_original( self, slot, command );
+	}
 
-		auto* camera = reinterpret_cast< float* >(
-			reinterpret_cast< std::uint8_t* >( self ) + k_view_angles_offset );
-		const bool camera_readable = readable( camera, sizeof( float ) * 3u );
-		const float saved_pitch = camera_readable ? camera[ 0 ] : 0.0f;
-		const float saved_yaw = camera_readable ? camera[ 1 ] : 0.0f;
-		const float saved_roll = camera_readable ? camera[ 2 ] : 0.0f;
+	auto* camera = reinterpret_cast<float*>(
+		reinterpret_cast<std::uint8_t*>( self ) + k_view_angles_offset );
+	const bool camera_readable = readable( camera, sizeof( float ) * 3u );
+	const float saved_pitch = camera_readable ? camera[ 0 ] : 0.0f;
+	const float saved_yaw = camera_readable ? camera[ 1 ] : 0.0f;
+	const float saved_roll = camera_readable ? camera[ 2 ] : 0.0f;
 
-		// The engine rebuilds the outgoing command inside the original, so the
-		// command it produced is the one that gets steered.
-		const double result = g_original( self, slot, command );
+	float write_pitch = aim.pitch;
+	float write_yaw = wrap_angle( aim.yaw );
+	if ( antiaim )
+	{
+		g_spin = wrap_angle( g_spin + static_cast<float>( config.aa_spin_speed ) );
+		write_pitch = apply_pitch( config.aa_pitch, saved_pitch );
+		write_yaw = wrap_angle( g_spin );
+	}
 
-		float* angles = command_angles( command );
-		if ( !angles )
-		{
-			if ( !g_write_failed_logged )
-			{
-				g_write_failed_logged = true;
-				log_line( "the command view angles could not be resolved; aim writes stay disabled" );
-			}
-			return result;
-		}
+	// The engine copies the input view angles into the outgoing command, so they
+	// are overwritten before the original runs to steer what the server receives.
+	if ( camera_readable )
+	{
+		camera[ 0 ] = write_pitch;
+		camera[ 1 ] = write_yaw;
+	}
 
-		if ( antiaim )
-		{
-			g_spin = wrap_angle( g_spin + static_cast< float >( config.aa_spin_speed ) );
-			angles[ 0 ] = apply_pitch( config.aa_pitch, angles[ 0 ] );
-			angles[ 1 ] = wrap_angle( g_spin );
-		}
-		else
-		{
-			angles[ 0 ] = aim.pitch;
-			angles[ 1 ] = wrap_angle( aim.yaw );
-		}
+	const double result = g_original( self, slot, command );
 
+	// The finished command is stamped too whenever its buffer can be resolved.
+	if ( float* angles = command_angles( command ) )
+	{
+		angles[ 0 ] = write_pitch;
+		angles[ 1 ] = write_yaw;
 		if ( !g_first_write_logged )
 		{
 			g_first_write_logged = true;
 			log_line( "command view angles written (silent=%d antiaim=%d angles=%p)",
-				silent ? 1 : 0, antiaim ? 1 : 0, static_cast< void* >( angles ) );
+				silent ? 1 : 0, antiaim ? 1 : 0, static_cast<void*>( angles ) );
 		}
-
-		// Anti-aim also moves the local view so the spin is visible; silent aim
-		// keeps the camera exactly where the user was looking.
-		if ( camera_readable )
-		{
-			if ( antiaim )
-			{
-				camera[ 0 ] = apply_pitch( config.aa_pitch, saved_pitch );
-				camera[ 1 ] = wrap_angle( g_spin );
-			}
-			else
-			{
-				camera[ 0 ] = saved_pitch;
-				camera[ 1 ] = saved_yaw;
-				camera[ 2 ] = saved_roll;
-			}
-		}
-
-		return result;
 	}
+	else if ( !g_write_failed_logged )
+	{
+		g_write_failed_logged = true;
+		log_line( "the command view angles could not be resolved; only the input angles are steered" );
+	}
+
+	// Silent aim restores the camera so the local view never moves. Anti-aim
+	// leaves the written angles in place, so the spin is visible on screen.
+	if ( camera_readable )
+	{
+		if ( antiaim )
+		{
+			camera[ 0 ] = write_pitch;
+			camera[ 1 ] = write_yaw;
+		}
+		else
+		{
+			camera[ 0 ] = saved_pitch;
+			camera[ 1 ] = saved_yaw;
+			camera[ 2 ] = saved_roll;
+		}
+	}
+
+	return result;
+}
 
 	float advance_spin( const float current, const float speed )
 	{
